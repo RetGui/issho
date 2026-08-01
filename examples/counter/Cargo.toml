@@ -1,0 +1,12 @@
+[package]
+name = "issho-counter"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+issho = { path = "../.." }
+winit = "0.30.13"
+simple_logger = "5.2.0"
+softbuffer = "0.4.8"
+vello_cpu = "0.1.0"

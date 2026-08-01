@@ -1,0 +1,40 @@
+[package]
+name = "issho"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+description = "Retained accessibility infrastructure for custom Rust user interfaces"
+documentation = "https://docs.rs/issho"
+readme = "README.md"
+repository = "https://github.com/craft-gui/issho"
+license = "Unlicense"
+keywords = ["accessibility", "gui", "ui", "ui-automation"]
+categories = ["gui", "no-std"]
+
+[workspace]
+members = ["examples/counter"]
+resolver = "3"
+
+[dependencies]
+hashbrown = { version = "0.17.1", default-features = false, features = [
+    "alloc",
+    "default-hasher",
+] }
+log = { version = "0.4.33", default-features = false }
+raw-window-handle = { version = "0.6.2", default-features = false }
+slotmap = { version = "1.1.1", default-features = false }
+smol_str = { version = "0.3.6", default-features = false }
+smolvec = "1.0.0"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62.2", default-features = false, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Com",
+    "Win32_System_Ole",
+    "Win32_System_Variant",
+    "Win32_UI_Accessibility",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+windows-core = { version = "0.62.2", default-features = false }
