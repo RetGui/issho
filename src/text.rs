@@ -6,6 +6,4 @@ pub enum SupportedTextSelection {
     Multiple,
 }
 
-pub struct TextData {
-    
-}
+pub struct TextData {}

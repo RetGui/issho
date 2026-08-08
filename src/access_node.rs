@@ -1,5 +1,4 @@
 use alloc::boxed::Box;
-use alloc::rc::Rc;
 use alloc::string::String;
 
 use core::sync::atomic::{AtomicU64, Ordering};
@@ -10,6 +9,7 @@ use smolvec::SmolVec;
 
 use crate::AccessKey;
 use crate::access_rect::AccessRect;
+use crate::access_window::AccessNodeContext;
 use crate::live_setting::LiveSetting;
 use crate::roles::Role;
 use crate::text::{SupportedTextSelection, TextData};
@@ -23,7 +23,7 @@ fn next_id() -> u64 {
 }
 
 /// A node in an accessibility tree.
-pub struct AccessNode {
+pub struct AccessNode<T: AccessNodeContext> {
     pub(crate) parent: Option<AccessKey>,
     pub(crate) children: SmolVec<AccessKey>,
     /// A globally unique id for this node.
@@ -35,13 +35,13 @@ pub struct AccessNode {
     name: SmolStr,
     role: Role,
     value: String,
-    toggle_action: Option<Rc<dyn Fn()>>,
 
     text_selection: SupportedTextSelection,
     text_data: Option<Box<TextData>>,
+    context: Option<T>,
 }
 
-impl Clone for AccessNode {
+impl<T: AccessNodeContext> Clone for AccessNode<T> {
     fn clone(&self) -> Self {
         Self {
             parent: None,
@@ -54,14 +54,14 @@ impl Clone for AccessNode {
             name: self.name.clone(),
             role: self.role,
             value: self.value.clone(),
-            toggle_action: self.toggle_action.clone(),
             text_selection: self.text_selection,
             text_data: None,
+            context: self.context.clone(),
         }
     }
 }
 
-impl AccessNode {
+impl<T: AccessNodeContext> AccessNode<T> {
     /// Creates a node with default accessibility properties.
     pub fn new() -> Self {
         Self {
@@ -75,9 +75,9 @@ impl AccessNode {
             name: SmolStr::default(),
             role: Role::GenericContainer,
             value: String::new(),
-            toggle_action: None,
             text_selection: SupportedTextSelection::None,
             text_data: None,
+            context: None,
         }
     }
 
@@ -164,18 +164,6 @@ impl AccessNode {
         core::mem::replace(&mut self.value, value)
     }
 
-    /// Sets the action invoked when an accessibility client toggles this node.
-    ///
-    /// A control must cycle through its ToggleState in this order:
-    /// ToggleState_On, ToggleState_Off and, if supported, ToggleState_Indeterminate.
-    pub fn set_toggle_action(&mut self, action: impl Fn() + 'static) {
-        self.toggle_action = Some(Rc::new(action));
-    }
-
-    pub(crate) fn toggle_action(&self) -> Option<Rc<dyn Fn()>> {
-        self.toggle_action.clone()
-    }
-
     /// Sets the supported text selection mode.
     pub fn set_text_supported_text_selection(
         &mut self,
@@ -188,9 +176,19 @@ impl AccessNode {
     pub fn supports_text_selection(&self) -> SupportedTextSelection {
         self.text_selection
     }
+
+    /// Sets the node context. This is likely some id or pointer to your UI tree.
+    pub fn set_context(&mut self, context: T) {
+        self.context = Some(context);
+    }
+
+    /// Gets the node context.
+    pub fn context(&self) -> Option<&T> {
+        self.context.as_ref()
+    }
 }
 
-impl Default for AccessNode {
+impl<T: AccessNodeContext> Default for AccessNode<T> {
     fn default() -> Self {
         Self::new()
     }
@@ -201,11 +199,13 @@ mod tests {
     extern crate std;
 
     use super::AccessNode;
+    #[derive(Clone)]
+    struct TestContext;
 
     #[test]
     fn nodes_and_clones_have_unique_ids() {
-        let first = AccessNode::new();
-        let second = AccessNode::new();
+        let first = AccessNode::<TestContext>::new();
+        let second = AccessNode::<TestContext>::new();
         let clone = first.clone();
 
         assert_ne!(first.id(), second.id());
@@ -215,8 +215,8 @@ mod tests {
 
     #[test]
     fn ids_are_unique_across_threads() {
-        let first = AccessNode::new().id();
-        let second = std::thread::spawn(|| AccessNode::new().id())
+        let first = AccessNode::<TestContext>::new().id();
+        let second = std::thread::spawn(|| AccessNode::<TestContext>::new().id())
             .join()
             .unwrap();
 

@@ -9,4 +9,4 @@ issho = { path = "../.." }
 winit = "0.30.13"
 simple_logger = "5.2.0"
 softbuffer = "0.4.8"
-vello_cpu = "0.1.0"
+vello_cpu = "0.2.0"

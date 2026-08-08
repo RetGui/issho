@@ -6,29 +6,63 @@ use core::ops::Range;
 use core::ptr;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::access_tree::WeakAccessTree;
-use crate::platforms::AccessPlatform;
-use crate::{
-    AccessKey, AccessProperty, AccessPropertyValue, AccessRect, AccessTree, AccessWindow,
-    LiveSetting, Role,
-};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use windows::Win32::Foundation::{E_INVALIDARG, E_OUTOFMEMORY, HWND as WindowHandle, LPARAM, LRESULT, POINT, RECT, TRUE, WPARAM};
+
+use windows::Win32::Foundation::{
+    E_INVALIDARG, E_OUTOFMEMORY, HWND as WindowHandle, LPARAM, LRESULT, POINT, RECT, TRUE, WPARAM,
+};
 use windows::Win32::Graphics::Gdi::ClientToScreen;
 use windows::Win32::System::Com::{
     COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize, SAFEARRAY,
 };
 use windows::Win32::System::Ole::{SafeArrayCreateVector, SafeArrayDestroy, SafeArrayPutElement};
 use windows::Win32::System::Variant::{VARIANT, VT_I4, VT_R8};
-use windows::Win32::UI::Accessibility::{Assertive as UiaAssertive, IRawElementProviderFragment, IRawElementProviderFragment_Impl, IRawElementProviderFragmentRoot, IRawElementProviderFragmentRoot_Impl, IRawElementProviderSimple, IRawElementProviderSimple_Impl, ITextProvider, ITextProvider_Impl, ITextRangeProvider, ITextRangeProvider_Impl, IToggleProvider, IToggleProvider_Impl, NavigateDirection, NavigateDirection_FirstChild, NavigateDirection_LastChild, NavigateDirection_NextSibling, NavigateDirection_Parent, NavigateDirection_PreviousSibling, Off as UiaOff, Polite as UiaPolite, ProviderOptions, ProviderOptions_ServerSideProvider, ProviderOptions_UseComThreading, SupportedTextSelection, SupportedTextSelection_Single, TextPatternRangeEndpoint, TextUnit, ToggleState, ToggleState_Off, ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId, UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId, UIA_E_ELEMENTNOTAVAILABLE, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId, UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId, UIA_ImageControlTypeId, UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId, UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId, UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId, UIA_MenuControlTypeId, UIA_MenuItemControlTypeId, UIA_NamePropertyId, UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId, UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId, UIA_SeparatorControlTypeId, UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID, UIA_TabControlTypeId, UIA_TabItemControlTypeId, UIA_TextControlTypeId, UIA_TextPatternId, UIA_TogglePatternId, UIA_ToggleToggleStatePropertyId, UIA_ToolBarControlTypeId, UIA_TreeControlTypeId, UIA_TreeItemControlTypeId, UIA_ValueValuePropertyId, UIA_WindowControlTypeId, UiaAppendRuntimeId, UiaHostProviderFromHwnd, UiaPoint, UiaRaiseAutomationEvent, UiaRaiseAutomationPropertyChangedEvent, UiaRect, UiaReturnRawElementProvider, UiaRootObjectId, TextUnit_Character};
 use windows::Win32::UI::Accessibility::{
-    SupportedTextSelection_Multiple, SupportedTextSelection_None, TextUnit_Document,
-    TextUnit_Format, TextUnit_Line, TextUnit_Page, TextUnit_Paragraph, TextUnit_Word,
+    Assertive as UiaAssertive, IRawElementProviderFragment, IRawElementProviderFragment_Impl,
+    IRawElementProviderFragmentRoot, IRawElementProviderFragmentRoot_Impl,
+    IRawElementProviderSimple, IRawElementProviderSimple_Impl, ITextProvider, ITextProvider_Impl,
+    ITextRangeProvider, ITextRangeProvider_Impl, IToggleProvider, IToggleProvider_Impl,
+    NavigateDirection, NavigateDirection_FirstChild, NavigateDirection_LastChild,
+    NavigateDirection_NextSibling, NavigateDirection_Parent, NavigateDirection_PreviousSibling,
+    Off as UiaOff, Polite as UiaPolite, ProviderOptions, ProviderOptions_ServerSideProvider,
+    ProviderOptions_UseComThreading, SupportedTextSelection, SupportedTextSelection_Single,
+    TextPatternRangeEndpoint, TextUnit, TextUnit_Character, ToggleState, ToggleState_Off,
+    ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId,
+    UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId,
+    UIA_E_ELEMENTNOTAVAILABLE, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId,
+    UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId,
+    UIA_ImageControlTypeId, UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId,
+    UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId,
+    UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId,
+    UIA_MenuControlTypeId, UIA_MenuItemControlTypeId, UIA_NamePropertyId,
+    UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId,
+    UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId,
+    UIA_SeparatorControlTypeId, UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID,
+    UIA_TabControlTypeId, UIA_TabItemControlTypeId, UIA_TextControlTypeId, UIA_TextPatternId,
+    UIA_TogglePatternId, UIA_ToggleToggleStatePropertyId, UIA_ToolBarControlTypeId,
+    UIA_TreeControlTypeId, UIA_TreeItemControlTypeId, UIA_ValueValuePropertyId,
+    UIA_WindowControlTypeId, UiaAppendRuntimeId, UiaHostProviderFromHwnd, UiaPoint,
+    UiaRaiseAutomationEvent, UiaRaiseAutomationPropertyChangedEvent, UiaRect,
+    UiaReturnRawElementProvider, UiaRootObjectId,
+};
+use windows::Win32::UI::Accessibility::{
+    ISelectionItemProvider, ISelectionItemProvider_Impl, SupportedTextSelection_Multiple,
+    SupportedTextSelection_None, TextUnit_Document, TextUnit_Format, TextUnit_Line, TextUnit_Page,
+    TextUnit_Paragraph, TextUnit_Word, UIA_SelectionItemIsSelectedPropertyId,
+    UIA_SelectionItemPatternId,
 };
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, WM_GETOBJECT, WM_NCDESTROY};
 use windows::core::{BSTR, IUnknown, IUnknownImpl, Interface, implement};
 use windows_core::{BOOL, Ref};
+
+use crate::access_tree::WeakAccessTree;
+use crate::access_window::AccessNodeContext;
+use crate::platforms::AccessPlatform;
+use crate::{
+    AccessEvent, AccessKey, AccessProperty, AccessPropertyValue, AccessRect, AccessTree,
+    AccessWindow, LiveSetting, Role,
+};
 
 // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-providersoverview
 
@@ -133,8 +167,8 @@ fn element_not_available() -> windows_core::Error {
     windows_core::Error::from_hresult(windows_core::HRESULT(UIA_E_ELEMENTNOTAVAILABLE as i32))
 }
 
-fn root_window_handle<T: AccessWindow>(
-    access_tree: &AccessTree<T>,
+fn root_window_handle<T: AccessWindow, U: AccessNodeContext>(
+    access_tree: &AccessTree<T, U>,
     root: AccessKey,
 ) -> windows_core::Result<WindowHandle> {
     let window = access_tree
@@ -217,13 +251,13 @@ impl Drop for ComApartment {
     }
 }
 
-struct SubclassData<T: AccessWindow> {
+struct SubclassData<T: AccessWindow, U: AccessNodeContext> {
     platform: Rc<WindowsPlatformState>,
-    access_tree: WeakAccessTree<T>,
+    access_tree: WeakAccessTree<T, U>,
     root: AccessKey,
 }
 
-unsafe extern "system" fn subclass_proc<T>(
+unsafe extern "system" fn subclass_proc<T, U>(
     window_handle: WindowHandle,
     msg: u32,
     wparam: WPARAM,
@@ -233,8 +267,9 @@ unsafe extern "system" fn subclass_proc<T>(
 ) -> LRESULT
 where
     T: AccessWindow,
+    U: AccessNodeContext,
 {
-    let data_ptr = data as *mut SubclassData<T>;
+    let data_ptr = data as *mut SubclassData<T, U>;
     let data = unsafe { &*data_ptr };
 
     if msg == WM_GETOBJECT {
@@ -257,6 +292,7 @@ where
                 platform: data.platform.clone(),
                 access_tree: access_tree.downgrade(),
                 node: data.root,
+                text_range: None,
             }
             .into();
             return unsafe {
@@ -268,7 +304,7 @@ where
     let result = unsafe { DefSubclassProc(window_handle, msg, wparam, lparam) };
 
     if msg == WM_NCDESTROY {
-        let _ = unsafe { RemoveWindowSubclass(window_handle, Some(subclass_proc::<T>), id) };
+        let _ = unsafe { RemoveWindowSubclass(window_handle, Some(subclass_proc::<T, U>), id) };
         unsafe {
             drop(Box::from_raw(data_ptr));
         }
@@ -279,7 +315,6 @@ where
 
 pub struct WindowsPlatform {
     state: Rc<WindowsPlatformState>,
-    text_range: Option<Range<u64>>,
 }
 
 impl WindowsPlatform {
@@ -289,7 +324,6 @@ impl WindowsPlatform {
                 id: NEXT_PLATFORM_ID.fetch_add(1, Ordering::Relaxed),
                 com_apartment: OnceCell::new(),
             }),
-            text_range: None,
         }
     }
 }
@@ -308,22 +342,24 @@ impl Default for WindowsPlatform {
     ITextProvider,
     ITextRangeProvider
 )]
-struct WindowsProvider<T>
+struct WindowsProvider<T, U>
 where
     T: AccessWindow,
+    U: AccessNodeContext,
 {
     platform: Rc<WindowsPlatformState>,
-    access_tree: WeakAccessTree<T>,
+    access_tree: WeakAccessTree<T, U>,
     node: AccessKey,
+    text_range: Option<Range<u64>>,
 }
 
-impl<T: AccessWindow> WindowsProvider<T> {
-    fn access_tree(&self) -> windows_core::Result<AccessTree<T>> {
+impl<T: AccessWindow, U: AccessNodeContext> WindowsProvider<T, U> {
+    fn access_tree(&self) -> windows_core::Result<AccessTree<T, U>> {
         self.access_tree.upgrade().ok_or_else(element_not_available)
     }
 }
 
-impl<T: AccessWindow> AccessPlatform<T> for WindowsPlatform {
+impl<T: AccessWindow, U: AccessNodeContext> AccessPlatform<T, U> for WindowsPlatform {
     fn register_platform(&self) -> Result<(), ()> {
         if self.state.com_apartment.get().is_some() {
             return Ok(());
@@ -339,7 +375,7 @@ impl<T: AccessWindow> AccessPlatform<T> for WindowsPlatform {
         self.state.com_apartment.set(apartment).map_err(|_| ())
     }
 
-    fn register_window(&self, window: T, access_tree: &AccessTree<T>) -> Result<(), ()> {
+    fn register_window(&self, window: T, access_tree: &AccessTree<T, U>) -> Result<(), ()> {
         let window_handle = get_window_handle(&window).map_err(|_| ())?;
         let root = access_tree.get_window_root(&window).ok_or(())?;
         log::debug!(
@@ -357,7 +393,12 @@ impl<T: AccessWindow> AccessPlatform<T> for WindowsPlatform {
         let id = data as usize;
 
         let result = unsafe {
-            SetWindowSubclass(window_handle, Some(subclass_proc::<T>), id, data as usize)
+            SetWindowSubclass(
+                window_handle,
+                Some(subclass_proc::<T, U>),
+                id,
+                data as usize,
+            )
         }
         .ok()
         .map_err(|_| ());
@@ -371,11 +412,12 @@ impl<T: AccessWindow> AccessPlatform<T> for WindowsPlatform {
         result
     }
 
-    fn focus_changed(&self, node: AccessKey, access_tree: &AccessTree<T>) -> Result<(), ()> {
+    fn focus_changed(&self, node: AccessKey, access_tree: &AccessTree<T, U>) -> Result<(), ()> {
         let provider: IRawElementProviderSimple = WindowsProvider {
             platform: self.state.clone(),
             access_tree: access_tree.downgrade(),
             node,
+            text_range: None,
         }
         .into();
 
@@ -389,7 +431,7 @@ impl<T: AccessWindow> AccessPlatform<T> for WindowsPlatform {
         property: AccessProperty,
         old_value: AccessPropertyValue<'_>,
         new_value: AccessPropertyValue<'_>,
-        access_tree: &AccessTree<T>,
+        access_tree: &AccessTree<T, U>,
     ) -> Result<(), ()> {
         let property_id = uia_property_id(property);
         let old_value = uia_property_variant(property, old_value).ok_or(())?;
@@ -399,6 +441,7 @@ impl<T: AccessWindow> AccessPlatform<T> for WindowsPlatform {
             platform: self.state.clone(),
             access_tree: access_tree.downgrade(),
             node,
+            text_range: None,
         }
         .into();
 
@@ -420,9 +463,10 @@ impl<T: AccessWindow> AccessPlatform<T> for WindowsPlatform {
 }
 
 // Defines methods and properties that expose simple UI elements.
-impl<T> IRawElementProviderSimple_Impl for WindowsProvider_Impl<T>
+impl<T, U> IRawElementProviderSimple_Impl for WindowsProvider_Impl<T, U>
 where
     T: AccessWindow,
+    U: AccessNodeContext,
 {
     /// Specifies the type of Microsoft UI Automation provider; for example, whether it is a client-side (proxy) or server-side provider.
     #[allow(non_snake_case)]
@@ -485,8 +529,13 @@ where
         if property_id == UIA_ValueValuePropertyId {
             return Ok(string_variant(node.value()));
         }
-        if property_id == UIA_ToggleToggleStatePropertyId && role == Role::CheckBox {
+        if property_id == UIA_ToggleToggleStatePropertyId
+            && (role == Role::CheckBox || role == Role::RadioButton)
+        {
             return Ok(i32_variant(uia_toggle_state(node.checked()).0));
+        }
+        if property_id == UIA_SelectionItemIsSelectedPropertyId && role == Role::RadioButton {
+            return Ok(bool_variant(node.checked()));
         }
         if property_id == UIA_LiveSettingPropertyId {
             return Ok(i32_variant(uia_live_setting(node.live_setting())));
@@ -550,20 +599,18 @@ where
 
 // Provides access to controls that can cycle through a set of states and maintain a state after it is set.
 #[allow(non_snake_case)]
-impl<T> IToggleProvider_Impl for WindowsProvider_Impl<T>
+impl<T, U> IToggleProvider_Impl for WindowsProvider_Impl<T, U>
 where
     T: AccessWindow,
+    U: AccessNodeContext,
 {
     /// Cycles through the toggle states of a control.
     #[allow(non_snake_case)]
     fn Toggle(&self) -> windows_core::Result<()> {
-        // A control must cycle through its ToggleState in this order:
-        // ToggleState_On, ToggleState_Off and, if supported, ToggleState_Indeterminate.
-        if self.access_tree()?.invoke_toggle(self.node) {
-            Ok(())
-        } else {
-            Err(windows_core::Error::empty())
-        }
+        let access_tree = self.access_tree()?;
+        access_tree
+            .dispatch_access_event(self.node, AccessEvent::Toggle)
+            .map_err(|_| element_not_available())
     }
 
     /// Specifies the toggle state of the control.
@@ -585,9 +632,10 @@ where
 
 // Exposes methods and properties on UI elements that are part of a structure more than one level deep,
 // such as a list box or list item. Implemented by Microsoft UI Automation provider.
-impl<T> IRawElementProviderFragment_Impl for WindowsProvider_Impl<T>
+impl<T, U> IRawElementProviderFragment_Impl for WindowsProvider_Impl<T, U>
 where
     T: AccessWindow,
+    U: AccessNodeContext,
 {
     /// Retrieves the Microsoft UI Automation element in a specified direction within the UI Automation tree.
     #[allow(non_snake_case, non_upper_case_globals)]
@@ -628,6 +676,7 @@ where
             platform: self.platform.clone(),
             access_tree: self.access_tree.clone(),
             node,
+            text_range: None,
         }
         .into())
     }
@@ -751,15 +800,17 @@ where
             platform: self.platform.clone(),
             access_tree: self.access_tree.clone(),
             node: root,
+            text_range: None,
         }
         .into())
     }
 }
 
 // Exposes methods and properties on the root element in a fragment.
-impl<T> IRawElementProviderFragmentRoot_Impl for WindowsProvider_Impl<T>
+impl<T, U> IRawElementProviderFragmentRoot_Impl for WindowsProvider_Impl<T, U>
 where
     T: AccessWindow,
+    U: AccessNodeContext,
 {
     /// Retrieves the provider of the element that is at the specified point in this fragment.
     #[allow(non_snake_case)]
@@ -788,6 +839,7 @@ where
             platform: self.platform.clone(),
             access_tree: self.access_tree.clone(),
             node,
+            text_range: None,
         }
         .into())
     }
@@ -809,15 +861,17 @@ where
             platform: self.platform.clone(),
             access_tree: self.access_tree.clone(),
             node: focus,
+            text_range: None,
         }
         .into())
     }
 }
 
 // Provides access to controls that contain text.
-impl<T> ITextProvider_Impl for WindowsProvider_Impl<T>
+impl<T, U> ITextProvider_Impl for WindowsProvider_Impl<T, U>
 where
     T: AccessWindow,
+    U: AccessNodeContext,
 {
     /// Returns the degenerate (empty) text range nearest to the specified screen coordinates.
     #[allow(non_snake_case)]
@@ -842,7 +896,9 @@ where
             platform: self.platform.clone(),
             access_tree: self.access_tree.clone(),
             node: self.node,
-        }.into())
+            text_range: None,
+        }
+        .into())
     }
 
     /// Retrieves a collection of text ranges that represents the currently selected text in a text-based control.
@@ -852,7 +908,9 @@ where
             platform: self.platform.clone(),
             access_tree: self.access_tree.clone(),
             node: self.node,
-        }.into())
+            text_range: None,
+        }
+        .into())
     }
 
     /// Retrieves a text range that encloses the main text of a document.
@@ -862,7 +920,9 @@ where
             platform: self.platform.clone(),
             access_tree: self.access_tree.clone(),
             node: self.node,
-        }.into())
+            text_range: None,
+        }
+        .into())
     }
 
     /// Retrieves a value that specifies the type of text selection that is supported by the control.
@@ -882,9 +942,10 @@ where
 }
 
 // Provides access to a span of continuous text in a text container that implements ITextProvider or ITextProvider2.
-impl<T> ITextRangeProvider_Impl for WindowsProvider_Impl<T>
+impl<T, U> ITextRangeProvider_Impl for WindowsProvider_Impl<T, U>
 where
     T: AccessWindow,
+    U: AccessNodeContext,
 {
     /// Returns a new ITextRangeProvider identical to the original ITextRangeProvider and
     /// inheriting all properties of the original.
@@ -899,6 +960,7 @@ where
             platform: self.platform.clone(),
             access_tree: self.access_tree.clone(),
             node: self.node,
+            text_range: None,
         }
         .into())
     }
@@ -1054,7 +1116,7 @@ where
 
     #[allow(non_snake_case)]
     fn GetEnclosingElement(&self) -> windows_core::Result<IRawElementProviderSimple> {
-        todo!()
+        Err(windows_core::Error::from_hresult(E_INVALIDARG))
     }
 
     #[allow(non_snake_case)]
@@ -1091,7 +1153,11 @@ where
     #[allow(non_snake_case)]
     fn Select(&self) -> windows_core::Result<()> {
         // Providing a degenerate text range will move the text insertion point.
-        Ok(())
+        let access_tree = self.access_tree()?;
+        let event = AccessEvent::TextSelection(self.text_range.clone().unwrap());
+        access_tree
+            .dispatch_access_event(self.node, event)
+            .map_err(|_| element_not_available())
     }
 
     #[allow(non_snake_case)]
@@ -1105,7 +1171,7 @@ where
     }
 
     #[allow(non_snake_case)]
-    fn ScrollIntoView(&self, aligntotop: BOOL) -> windows_core::Result<()> {
+    fn ScrollIntoView(&self, align_to_top: BOOL) -> windows_core::Result<()> {
         Ok(())
     }
 
@@ -1166,8 +1232,10 @@ mod tests {
                 .unwrap();
 
             let platform = WindowsPlatform::new();
-            <WindowsPlatform as AccessPlatform<TestWindow>>::register_platform(&platform).unwrap();
-            <WindowsPlatform as AccessPlatform<TestWindow>>::register_platform(&platform).unwrap();
+            <WindowsPlatform as AccessPlatform<TestWindow, ()>>::register_platform(&platform)
+                .unwrap();
+            <WindowsPlatform as AccessPlatform<TestWindow, ()>>::register_platform(&platform)
+                .unwrap();
             drop(platform);
 
             unsafe { CoUninitialize() };
@@ -1185,16 +1253,21 @@ mod tests {
 
     #[test]
     fn checkbox_exposes_the_toggle_pattern_and_checked_state() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let toggle_count = Rc::new(Cell::new(0));
         let mut node = crate::AccessNode::new();
         node.set_role(Role::CheckBox);
         node.set_checked(true);
-        node.set_toggle_action({
-            let toggle_count = toggle_count.clone();
-            move || toggle_count.set(toggle_count.get() + 1)
-        });
         let node = tree.insert_node(node, None);
+        tree.set_on_access_event({
+            let toggle_count = toggle_count.clone();
+            move |_, _, event| {
+                if matches!(event, AccessEvent::Toggle) {
+                    toggle_count.set(toggle_count.get() + 1);
+                }
+                Ok(())
+            }
+        });
         let provider: IRawElementProviderSimple = WindowsProvider {
             platform: Rc::new(WindowsPlatformState {
                 id: 1,
@@ -1202,6 +1275,7 @@ mod tests {
             }),
             access_tree: tree.downgrade(),
             node,
+            text_range: None,
         }
         .into();
 
@@ -1231,7 +1305,7 @@ mod tests {
         ];
 
         for (selection, expected) in selections {
-            let tree = AccessTree::<TestWindow>::new();
+            let tree = AccessTree::<TestWindow, ()>::new();
             let mut node = crate::AccessNode::new();
             node.set_role(Role::Label);
             node.set_text_supported_text_selection(selection);
@@ -1243,6 +1317,7 @@ mod tests {
                 }),
                 access_tree: tree.downgrade(),
                 node,
+                text_range: None,
             }
             .into();
 
@@ -1255,7 +1330,7 @@ mod tests {
 
     #[test]
     fn cloning_a_text_range_returns_an_independent_provider() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let node = tree.insert_node(crate::AccessNode::new(), None);
         let range: ITextRangeProvider = WindowsProvider {
             platform: Rc::new(WindowsPlatformState {
@@ -1264,6 +1339,7 @@ mod tests {
             }),
             access_tree: tree.downgrade(),
             node,
+            text_range: None,
         }
         .into();
 
@@ -1274,7 +1350,7 @@ mod tests {
 
     #[test]
     fn subclass_data_and_providers_do_not_retain_the_tree() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let root = tree.insert_node(crate::AccessNode::new(), None);
         let platform = Rc::new(WindowsPlatformState {
             id: 1,
@@ -1289,6 +1365,7 @@ mod tests {
             platform,
             access_tree: tree.downgrade(),
             node: root,
+            text_range: None,
         }
         .into();
 

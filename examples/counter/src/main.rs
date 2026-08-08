@@ -124,10 +124,13 @@ impl VelloRenderer {
     }
 }
 
+#[derive(Clone)]
+struct CounterNodeContext;
+
 struct App {
     window: Option<Rc<Window>>,
     renderer: Option<VelloRenderer>,
-    access_tree: AccessTree<Rc<Window>>,
+    access_tree: AccessTree<Rc<Window>, CounterNodeContext>,
     nodes: Option<CounterNodes>,
     cursor_position: PhysicalPosition<f64>,
     count: i32,

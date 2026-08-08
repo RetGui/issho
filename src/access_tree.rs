@@ -13,25 +13,42 @@ use slotmap::{DefaultKey, SlotMap};
 use smol_str::SmolStr;
 
 use crate::access_node::AccessNode;
+use crate::access_window::AccessNodeContext;
 use crate::platforms::{AccessPlatform, BlankPlatform};
-use crate::{AccessKey, AccessProperty, AccessPropertyValue, AccessWindow};
+use crate::{
+    AccessEvent, AccessKey, AccessProperty, AccessPropertyValue, AccessWindow, IsshoError,
+};
+
+/// Handles accessibility events.
+pub trait AccessEventHandler<T: AccessWindow, U: AccessNodeContext>:
+    Fn(&AccessTree<T, U>, AccessKey, AccessEvent) -> Result<(), IsshoError> + 'static
+{
+}
+
+impl<T, U, F> AccessEventHandler<T, U> for F
+where
+    T: AccessWindow,
+    U: AccessNodeContext,
+    F: Fn(&AccessTree<T, U>, AccessKey, AccessEvent) -> Result<(), IsshoError> + 'static,
+{
+}
 
 /// A collection of accessibility nodes exposed to the native platform.
 ///
 /// A tree can contain multiple roots, with each root representing a window.
 /// Cloning an `AccessTree` creates another handle to the same collection.
 #[derive(Clone)]
-pub struct AccessTree<T: AccessWindow> {
-    internal: Rc<RefCell<AccessTreeInternal<T>>>,
+pub struct AccessTree<T: AccessWindow, U: AccessNodeContext> {
+    internal: Rc<RefCell<AccessTreeInternal<T, U>>>,
 }
 
 #[cfg(target_os = "windows")]
 #[derive(Clone)]
-pub(crate) struct WeakAccessTree<T: AccessWindow> {
-    internal: Weak<RefCell<AccessTreeInternal<T>>>,
+pub(crate) struct WeakAccessTree<T: AccessWindow, U: AccessNodeContext> {
+    internal: Weak<RefCell<AccessTreeInternal<T, U>>>,
 }
 
-impl<T: AccessWindow> AccessTree<T> {
+impl<T: AccessWindow, U: AccessNodeContext> AccessTree<T, U> {
     /// Creates an empty accessibility tree backed by a no-op platform.
     pub fn new() -> Self {
         Self {
@@ -47,7 +64,7 @@ impl<T: AccessWindow> AccessTree<T> {
     /// # Panics
     ///
     /// Panics if `parent` is `Some` but is not a node in this tree.
-    pub fn insert_node(&self, node: AccessNode, parent: Option<AccessKey>) -> AccessKey {
+    pub fn insert_node(&self, node: AccessNode<U>, parent: Option<AccessKey>) -> AccessKey {
         self.internal.borrow_mut().insert_node(node, parent)
     }
 
@@ -57,7 +74,7 @@ impl<T: AccessWindow> AccessTree<T> {
     }
 
     #[cfg(target_os = "windows")]
-    pub(crate) fn downgrade(&self) -> WeakAccessTree<T> {
+    pub(crate) fn downgrade(&self) -> WeakAccessTree<T, U> {
         WeakAccessTree {
             internal: Rc::downgrade(&self.internal),
         }
@@ -77,7 +94,7 @@ impl<T: AccessWindow> AccessTree<T> {
     /// # Panics
     ///
     /// Panics if `node` is not in this tree.
-    pub fn update_node(&self, node: AccessKey, mut replacement: AccessNode) {
+    pub fn update_node(&self, node: AccessKey, mut replacement: AccessNode<U>) {
         let (old_name, old_value, old_checked, name_changed, value_changed, checked_changed) = {
             let mut internal = self.internal.borrow_mut();
             let current = internal.nodes.get_mut(node).expect("node not found");
@@ -190,7 +207,7 @@ impl<T: AccessWindow> AccessTree<T> {
     /// Returns a shared reference to `node`.
     ///
     /// Returns `None` if `node` does not belong to this tree.
-    pub fn get_node(&self, node: AccessKey) -> Option<Ref<'_, AccessNode>> {
+    pub fn get_node(&self, node: AccessKey) -> Option<Ref<'_, AccessNode<U>>> {
         Ref::filter_map(self.internal.borrow(), |internal| internal.nodes.get(node)).ok()
     }
 
@@ -199,7 +216,7 @@ impl<T: AccessWindow> AccessTree<T> {
     /// Returns `None` if `node` does not belong to this tree. Changes made
     /// through the returned guard are not reported to the native accessibility
     /// platform.
-    pub fn get_node_mut(&self, node: AccessKey) -> Option<RefMut<'_, AccessNode>> {
+    pub fn get_node_mut(&self, node: AccessKey) -> Option<RefMut<'_, AccessNode<U>>> {
         RefMut::filter_map(self.internal.borrow_mut(), |internal| {
             internal.nodes.get_mut(node)
         })
@@ -458,27 +475,13 @@ impl<T: AccessWindow> AccessTree<T> {
         self.internal.borrow().element_from_point(root, x, y)
     }
 
-    /// Invokes a node's toggle action.
-    ///
-    /// Returns `true` if the action was invoked. Returns `false` if `node` does
-    /// not belong to this tree or has no toggle action.
-    pub fn invoke_toggle(&self, node: AccessKey) -> bool {
-        let action = self.get_node(node).and_then(|node| node.toggle_action());
-        if let Some(action) = action {
-            action();
-            true
-        } else {
-            false
-        }
-    }
-
     /// Installs the accessibility platform used by this tree.
     ///
     /// # Errors
     ///
     /// Returns `Err` if the platform cannot be registered. The current platform
     /// remains installed if registration fails.
-    pub fn set_platform(&self, platform: Box<dyn AccessPlatform<T>>) -> Result<(), ()> {
+    pub fn set_platform(&self, platform: Box<dyn AccessPlatform<T, U>>) -> Result<(), ()> {
         self.internal.borrow_mut().set_platform(platform)
     }
 
@@ -488,6 +491,18 @@ impl<T: AccessWindow> AccessTree<T> {
     /// without a native implementation use a no-op platform.
     pub fn set_native_platform(&self) {
         let _ = self.internal.borrow_mut().set_native_platform();
+    }
+
+    /// Sets the callback to be used when ui related accessibility events occur.
+    ///
+    /// By default, the callback is a no-op.
+    pub fn set_on_access_event<EventHandler>(&self, on_access_event: EventHandler)
+    where
+        EventHandler: AccessEventHandler<T, U>,
+    {
+        self.internal
+            .borrow_mut()
+            .set_on_access_event(on_access_event);
     }
 
     /// Registers `window` with the tree's current accessibility platform.
@@ -503,11 +518,21 @@ impl<T: AccessWindow> AccessTree<T> {
             .platform
             .register_window(window.clone(), self);
     }
+
+    /// Dispatches an access event.
+    pub fn dispatch_access_event(
+        &self,
+        node: AccessKey,
+        event: AccessEvent,
+    ) -> Result<(), IsshoError> {
+        let handler = self.internal.borrow().on_access_event.clone();
+        handler(self, node, event)
+    }
 }
 
 #[cfg(target_os = "windows")]
-impl<T: AccessWindow> WeakAccessTree<T> {
-    pub(crate) fn upgrade(&self) -> Option<AccessTree<T>> {
+impl<T: AccessWindow, U: AccessNodeContext> WeakAccessTree<T, U> {
+    pub(crate) fn upgrade(&self) -> Option<AccessTree<T, U>> {
         Some(AccessTree {
             internal: self.internal.upgrade()?,
         })
@@ -515,27 +540,28 @@ impl<T: AccessWindow> WeakAccessTree<T> {
 }
 
 /// Stores accessibility data.
-struct AccessTreeInternal<T: AccessWindow> {
+struct AccessTreeInternal<T: AccessWindow, U: AccessNodeContext> {
     roots: HashMap<DefaultKey, Option<T>>,
-    nodes: SlotMap<DefaultKey, AccessNode>,
+    nodes: SlotMap<DefaultKey, AccessNode<U>>,
     focused_nodes: HashMap<DefaultKey, DefaultKey>,
     framework_name: String,
-    platform: Rc<dyn AccessPlatform<T>>,
+    platform: Rc<dyn AccessPlatform<T, U>>,
+    on_access_event: Rc<dyn AccessEventHandler<T, U>>,
 }
 
-impl<T: AccessWindow> Default for AccessTreeInternal<T> {
+impl<T: AccessWindow, U: AccessNodeContext> Default for AccessTreeInternal<T, U> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: AccessWindow> Default for AccessTree<T> {
+impl<T: AccessWindow, U: AccessNodeContext> Default for AccessTree<T, U> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: AccessWindow> AccessTreeInternal<T> {
+impl<T: AccessWindow, U: AccessNodeContext> AccessTreeInternal<T, U> {
     fn new() -> Self {
         Self {
             roots: HashMap::default(),
@@ -543,10 +569,11 @@ impl<T: AccessWindow> AccessTreeInternal<T> {
             focused_nodes: HashMap::default(),
             framework_name: String::new(),
             platform: Rc::new(BlankPlatform::new()),
+            on_access_event: Rc::new(|_, _, _| Ok(())),
         }
     }
 
-    fn insert_node(&mut self, mut node: AccessNode, parent: Option<DefaultKey>) -> DefaultKey {
+    fn insert_node(&mut self, mut node: AccessNode<U>, parent: Option<DefaultKey>) -> DefaultKey {
         node.parent = parent;
         let key = self.nodes.insert(node);
         if let Some(parent) = parent {
@@ -760,7 +787,7 @@ impl<T: AccessWindow> AccessTreeInternal<T> {
         Some(node)
     }
 
-    pub fn set_platform(&mut self, platform: Box<dyn AccessPlatform<T>>) -> Result<(), ()> {
+    pub fn set_platform(&mut self, platform: Box<dyn AccessPlatform<T, U>>) -> Result<(), ()> {
         platform.register_platform()?;
         self.platform = Rc::from(platform);
         Ok(())
@@ -768,23 +795,20 @@ impl<T: AccessWindow> AccessTreeInternal<T> {
 
     pub fn set_native_platform(&mut self) -> Result<(), ()> {
         let platform = cfg_select! {
-            target_os = "windows" => {
-                Box::new(crate::platforms::WindowsPlatform::new())
-            },
-            target_os = "macos" => {
-                Box::new(BlankPlatform::new())
-            },
-            target_family = "wasm" => {
-                Box::new(BlankPlatform::new())
-            },
-            target_os = "linux" => {
-                Box::new(BlankPlatform::new())
-            },
-            _ => {
-                Box::new(BlankPlatform::new())
-            }
+            target_os = "windows" => Box::new(crate::platforms::WindowsPlatform::new()),
+            target_os = "macos" => Box::new(BlankPlatform::new()),
+            target_family = "wasm" => Box::new(BlankPlatform::new()),
+            target_os = "linux" => Box::new(BlankPlatform::new()),
+            _ => Box::new(BlankPlatform::new()),
         };
         self.set_platform(platform)
+    }
+
+    fn set_on_access_event<EventHandler>(&mut self, on_access_event: EventHandler)
+    where
+        EventHandler: AccessEventHandler<T, U>,
+    {
+        self.on_access_event = Rc::new(on_access_event);
     }
 }
 
@@ -815,7 +839,7 @@ mod tests {
         value_event_count: Rc<Cell<u32>>,
     }
 
-    impl AccessPlatform<TestWindow> for FocusRecordingPlatform {
+    impl AccessPlatform<TestWindow, ()> for FocusRecordingPlatform {
         fn register_platform(&self) -> Result<(), ()> {
             Ok(())
         }
@@ -823,7 +847,7 @@ mod tests {
         fn register_window(
             &self,
             _window: TestWindow,
-            _access_tree: &AccessTree<TestWindow>,
+            _access_tree: &AccessTree<TestWindow, ()>,
         ) -> Result<(), ()> {
             Ok(())
         }
@@ -831,7 +855,7 @@ mod tests {
         fn focus_changed(
             &self,
             node: AccessKey,
-            _access_tree: &AccessTree<TestWindow>,
+            _access_tree: &AccessTree<TestWindow, ()>,
         ) -> Result<(), ()> {
             self.event_count.set(self.event_count.get() + 1);
             self.last_focused.set(Some(node));
@@ -844,7 +868,7 @@ mod tests {
             property: AccessProperty,
             _old_value: AccessPropertyValue<'_>,
             _new_value: AccessPropertyValue<'_>,
-            _access_tree: &AccessTree<TestWindow>,
+            _access_tree: &AccessTree<TestWindow, ()>,
         ) -> Result<(), ()> {
             match property {
                 AccessProperty::Checked => self
@@ -861,7 +885,7 @@ mod tests {
 
     #[test]
     fn framework_name_can_be_updated() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
 
         assert_eq!(tree.framework_name(), "");
 
@@ -874,7 +898,7 @@ mod tests {
     #[cfg(target_os = "windows")]
     fn weak_tree_does_not_retain_the_tree() {
         let weak_tree = {
-            let tree = AccessTree::<TestWindow>::new();
+            let tree = AccessTree::<TestWindow, ()>::new();
             tree.downgrade()
         };
 
@@ -883,7 +907,7 @@ mod tests {
 
     #[test]
     fn node_semantics_can_be_initialized_and_updated() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let mut node = AccessNode::new();
         node.set_name("Initial");
         node.set_role(Role::Button);
@@ -903,37 +927,32 @@ mod tests {
 
     #[test]
     fn nodes_are_enabled_by_default() {
-        assert!(AccessNode::new().enabled());
-        assert!(AccessNode::default().enabled());
+        assert!(AccessNode::<()>::new().enabled());
+        assert!(AccessNode::<()>::default().enabled());
     }
 
     #[test]
-    fn checked_state_is_retained_notified_and_actionable() {
-        let tree = AccessTree::<TestWindow>::new();
-        let platform = FocusRecordingPlatform::default();
-        tree.set_platform(Box::new(platform.clone())).unwrap();
-        let toggle_count = Rc::new(Cell::new(0));
-        let mut node = AccessNode::new();
-        node.set_role(Role::CheckBox);
-        node.set_checked(false);
-        node.set_toggle_action({
-            let toggle_count = toggle_count.clone();
-            move || toggle_count.set(toggle_count.get() + 1)
+    fn access_event_handler_can_update_the_tree() {
+        let tree = AccessTree::<TestWindow, ()>::new();
+        let node = tree.insert_node(AccessNode::new(), None);
+        tree.set_on_access_event(|tree, node, event| {
+            if matches!(event, AccessEvent::Toggle) {
+                tree.set_checked(node, true);
+            }
+            Ok(())
         });
-        let node = tree.insert_node(node, None);
 
-        tree.set_checked(node, true);
-        tree.set_checked(node, true);
+        assert!(
+            tree.dispatch_access_event(node, AccessEvent::Toggle)
+                .is_ok()
+        );
 
         assert!(tree.get_node(node).unwrap().checked());
-        assert_eq!(platform.checked_event_count.get(), 1);
-        assert!(tree.invoke_toggle(node));
-        assert_eq!(toggle_count.get(), 1);
     }
 
     #[test]
     fn focus_is_retained_per_root() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let first_root = tree.insert_node(AccessNode::new(), None);
         let first_child = tree.insert_node(AccessNode::new(), Some(first_root));
         let second_root = tree.insert_node(AccessNode::new(), None);
@@ -953,7 +972,7 @@ mod tests {
 
     #[test]
     fn focus_notification_is_forwarded_to_the_platform() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let platform = FocusRecordingPlatform::default();
         tree.set_platform(Box::new(platform.clone())).unwrap();
         let root = tree.insert_node(AccessNode::new(), None);
@@ -968,7 +987,7 @@ mod tests {
 
     #[test]
     fn changed_name_notifies_the_platform_once() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let platform = FocusRecordingPlatform::default();
         tree.set_platform(Box::new(platform.clone())).unwrap();
         let mut node = AccessNode::new();
@@ -989,7 +1008,7 @@ mod tests {
 
     #[test]
     fn value_can_be_initialized_and_updated() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let mut node = AccessNode::new();
         node.set_value("Initial");
         let node = tree.insert_node(node, None);
@@ -1003,7 +1022,7 @@ mod tests {
 
     #[test]
     fn changed_value_notifies_the_platform_once() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let platform = FocusRecordingPlatform::default();
         tree.set_platform(Box::new(platform.clone())).unwrap();
         let node = tree.insert_node(AccessNode::new(), None);
@@ -1017,7 +1036,7 @@ mod tests {
 
     #[test]
     fn bounding_rect_can_be_initialized_and_updated() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let initial = AccessRect::new(10.0, 20.0, 100.0, 50.0);
         let mut node = AccessNode::new();
         node.set_bounding_rect(initial);
@@ -1033,7 +1052,7 @@ mod tests {
 
     #[test]
     fn point_lookup_returns_the_topmost_deepest_node() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let mut root = AccessNode::new();
         root.set_bounding_rect(AccessRect::new(0.0, 0.0, 100.0, 100.0));
         let root = tree.insert_node(root, None);
@@ -1058,7 +1077,7 @@ mod tests {
 
     #[test]
     fn update_node_preserves_identity_and_children() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let mut root = AccessNode::new();
         root.set_name("before");
         let root = tree.insert_node(root, None);
@@ -1079,7 +1098,7 @@ mod tests {
 
     #[test]
     fn set_children_reorders_and_removes_omitted_subtrees() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let root = tree.insert_node(AccessNode::new(), None);
         let first = tree.insert_node(AccessNode::new(), Some(root));
         let grandchild = tree.insert_node(AccessNode::new(), Some(first));
@@ -1094,7 +1113,7 @@ mod tests {
 
     #[test]
     fn unnamed_parent_derives_name_from_retained_contents() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let parent = tree.insert_node(AccessNode::new(), None);
         let mut child = AccessNode::new();
         child.set_name("Open");
@@ -1109,7 +1128,7 @@ mod tests {
 
     #[test]
     fn detached_node_keeps_identity_when_reparented() {
-        let tree = AccessTree::<TestWindow>::new();
+        let tree = AccessTree::<TestWindow, ()>::new();
         let first_parent = tree.insert_node(AccessNode::new(), None);
         let second_parent = tree.insert_node(AccessNode::new(), None);
         let child = tree.insert_node(AccessNode::new(), Some(first_parent));

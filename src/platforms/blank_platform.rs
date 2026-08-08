@@ -1,21 +1,21 @@
 use crate::{
     AccessKey, AccessProperty, AccessPropertyValue, AccessTree, AccessWindow,
-    platforms::AccessPlatform,
+    access_window::AccessNodeContext, platforms::AccessPlatform,
 };
 
 #[derive(Copy, Clone, Default)]
 pub struct BlankPlatform;
 
-impl<T: AccessWindow> AccessPlatform<T> for BlankPlatform {
+impl<T: AccessWindow, U: AccessNodeContext> AccessPlatform<T, U> for BlankPlatform {
     fn register_platform(&self) -> Result<(), ()> {
         Ok(())
     }
 
-    fn register_window(&self, _window: T, _access_tree: &AccessTree<T>) -> Result<(), ()> {
+    fn register_window(&self, _window: T, _access_tree: &AccessTree<T, U>) -> Result<(), ()> {
         Ok(())
     }
 
-    fn focus_changed(&self, _node: AccessKey, _access_tree: &AccessTree<T>) -> Result<(), ()> {
+    fn focus_changed(&self, _node: AccessKey, _access_tree: &AccessTree<T, U>) -> Result<(), ()> {
         Ok(())
     }
 
@@ -25,7 +25,7 @@ impl<T: AccessWindow> AccessPlatform<T> for BlankPlatform {
         _property: AccessProperty,
         _old_value: AccessPropertyValue<'_>,
         _new_value: AccessPropertyValue<'_>,
-        _access_tree: &AccessTree<T>,
+        _access_tree: &AccessTree<T, U>,
     ) -> Result<(), ()> {
         Ok(())
     }

@@ -11,14 +11,19 @@ mod access_window;
 mod live_setting;
 mod roles;
 
-pub mod platforms;
+mod access_event;
 mod text;
 
+mod error;
+pub mod platforms;
+
+pub use crate::access_event::AccessEvent;
 pub use crate::access_node::AccessNode;
 pub use crate::access_property::{AccessProperty, AccessPropertyValue};
 pub use crate::access_rect::AccessRect;
-pub use crate::access_tree::AccessTree;
-pub use crate::access_window::AccessWindow;
+pub use crate::access_tree::{AccessEventHandler, AccessTree};
+pub use crate::access_window::{AccessNodeContext, AccessWindow};
+pub use crate::error::IsshoError;
 pub use crate::live_setting::LiveSetting;
 pub use crate::roles::Role;
 pub use crate::text::SupportedTextSelection;
