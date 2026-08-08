@@ -2,47 +2,9 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 
 use core::cell::OnceCell;
+use core::ops::Range;
 use core::ptr;
 use core::sync::atomic::{AtomicUsize, Ordering};
-
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use windows::Win32::Foundation::{
-    E_INVALIDARG, E_OUTOFMEMORY, HWND as WindowHandle, LPARAM, LRESULT, POINT, RECT, WPARAM,
-};
-use windows::Win32::Graphics::Gdi::ClientToScreen;
-use windows::Win32::System::Com::{
-    COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize, SAFEARRAY,
-};
-use windows::Win32::System::Ole::{SafeArrayCreateVector, SafeArrayDestroy, SafeArrayPutElement};
-use windows::Win32::System::Variant::{VARIANT, VT_I4};
-use windows::Win32::UI::Accessibility::{
-    Assertive as UiaAssertive, IRawElementProviderFragment, IRawElementProviderFragment_Impl,
-    IRawElementProviderFragmentRoot, IRawElementProviderFragmentRoot_Impl,
-    IRawElementProviderSimple, IRawElementProviderSimple_Impl, IToggleProvider,
-    IToggleProvider_Impl, NavigateDirection, NavigateDirection_FirstChild,
-    NavigateDirection_LastChild, NavigateDirection_NextSibling, NavigateDirection_Parent,
-    NavigateDirection_PreviousSibling, Off as UiaOff, Polite as UiaPolite, ProviderOptions,
-    ProviderOptions_ServerSideProvider, ProviderOptions_UseComThreading, ToggleState,
-    ToggleState_Off, ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId,
-    UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId,
-    UIA_E_ELEMENTNOTAVAILABLE, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId,
-    UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId,
-    UIA_ImageControlTypeId, UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId,
-    UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId,
-    UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId,
-    UIA_MenuControlTypeId, UIA_MenuItemControlTypeId, UIA_NamePropertyId,
-    UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId,
-    UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId,
-    UIA_SeparatorControlTypeId, UIA_SliderControlTypeId, UIA_TabControlTypeId,
-    UIA_TabItemControlTypeId, UIA_TextControlTypeId, UIA_TogglePatternId,
-    UIA_ToggleToggleStatePropertyId, UIA_ToolBarControlTypeId, UIA_TreeControlTypeId,
-    UIA_TreeItemControlTypeId, UIA_ValueValuePropertyId, UIA_WindowControlTypeId,
-    UiaAppendRuntimeId, UiaHostProviderFromHwnd, UiaRaiseAutomationEvent,
-    UiaRaiseAutomationPropertyChangedEvent, UiaRect, UiaReturnRawElementProvider, UiaRootObjectId,
-};
-use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
-use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, WM_GETOBJECT, WM_NCDESTROY};
-use windows::core::{BSTR, IUnknown, IUnknownImpl, Interface, implement};
 
 use crate::access_tree::WeakAccessTree;
 use crate::platforms::AccessPlatform;
@@ -50,6 +12,23 @@ use crate::{
     AccessKey, AccessProperty, AccessPropertyValue, AccessRect, AccessTree, AccessWindow,
     LiveSetting, Role,
 };
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use windows::Win32::Foundation::{E_INVALIDARG, E_OUTOFMEMORY, HWND as WindowHandle, LPARAM, LRESULT, POINT, RECT, TRUE, WPARAM};
+use windows::Win32::Graphics::Gdi::ClientToScreen;
+use windows::Win32::System::Com::{
+    COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize, SAFEARRAY,
+};
+use windows::Win32::System::Ole::{SafeArrayCreateVector, SafeArrayDestroy, SafeArrayPutElement};
+use windows::Win32::System::Variant::{VARIANT, VT_I4, VT_R8};
+use windows::Win32::UI::Accessibility::{Assertive as UiaAssertive, IRawElementProviderFragment, IRawElementProviderFragment_Impl, IRawElementProviderFragmentRoot, IRawElementProviderFragmentRoot_Impl, IRawElementProviderSimple, IRawElementProviderSimple_Impl, ITextProvider, ITextProvider_Impl, ITextRangeProvider, ITextRangeProvider_Impl, IToggleProvider, IToggleProvider_Impl, NavigateDirection, NavigateDirection_FirstChild, NavigateDirection_LastChild, NavigateDirection_NextSibling, NavigateDirection_Parent, NavigateDirection_PreviousSibling, Off as UiaOff, Polite as UiaPolite, ProviderOptions, ProviderOptions_ServerSideProvider, ProviderOptions_UseComThreading, SupportedTextSelection, SupportedTextSelection_Single, TextPatternRangeEndpoint, TextUnit, ToggleState, ToggleState_Off, ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId, UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId, UIA_E_ELEMENTNOTAVAILABLE, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId, UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId, UIA_ImageControlTypeId, UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId, UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId, UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId, UIA_MenuControlTypeId, UIA_MenuItemControlTypeId, UIA_NamePropertyId, UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId, UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId, UIA_SeparatorControlTypeId, UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID, UIA_TabControlTypeId, UIA_TabItemControlTypeId, UIA_TextControlTypeId, UIA_TextPatternId, UIA_TogglePatternId, UIA_ToggleToggleStatePropertyId, UIA_ToolBarControlTypeId, UIA_TreeControlTypeId, UIA_TreeItemControlTypeId, UIA_ValueValuePropertyId, UIA_WindowControlTypeId, UiaAppendRuntimeId, UiaHostProviderFromHwnd, UiaPoint, UiaRaiseAutomationEvent, UiaRaiseAutomationPropertyChangedEvent, UiaRect, UiaReturnRawElementProvider, UiaRootObjectId, TextUnit_Character};
+use windows::Win32::UI::Accessibility::{
+    SupportedTextSelection_Multiple, SupportedTextSelection_None, TextUnit_Document,
+    TextUnit_Format, TextUnit_Line, TextUnit_Page, TextUnit_Paragraph, TextUnit_Word,
+};
+use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
+use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, WM_GETOBJECT, WM_NCDESTROY};
+use windows::core::{BSTR, IUnknown, IUnknownImpl, Interface, implement};
+use windows_core::{BOOL, Ref};
 
 // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-providersoverview
 
@@ -198,13 +177,26 @@ fn window_point(x: f64, y: f64, origin: POINT) -> (f64, f64) {
     (x - f64::from(origin.x), y - f64::from(origin.y))
 }
 
+/// State shared by a Windows platform instance, its window subclasses, and its COM providers.
+///
+/// Sharing this state keeps the platform's COM apartment initialized for as long as any object
+/// created by the platform may still receive UI Automation calls. The apartment guard is stored
+/// once, when the platform is first registered.
 struct WindowsPlatformState {
+    /// Process-local identifier used to correlate platform lifecycle log messages.
     id: usize,
+    /// Guard for the platform's successful COM initialization, if it has been registered.
     com_apartment: OnceCell<ComApartment>,
 }
 
+/// RAII guard that balances one successful call to `CoInitializeEx` with `CoUninitialize`.
+///
+/// COM initialization is thread-affine, so this guard must be dropped on the same thread on which
+/// it was created. It is held inside the reference-counted, non-`Send` platform state to preserve
+/// that invariant.
 #[derive(Debug)]
 struct ComApartment {
+    /// Identifier of the owning platform, retained for lifecycle logging.
     platform_id: usize,
 }
 
@@ -287,6 +279,7 @@ where
 
 pub struct WindowsPlatform {
     state: Rc<WindowsPlatformState>,
+    text_range: Option<Range<u64>>,
 }
 
 impl WindowsPlatform {
@@ -296,6 +289,7 @@ impl WindowsPlatform {
                 id: NEXT_PLATFORM_ID.fetch_add(1, Ordering::Relaxed),
                 com_apartment: OnceCell::new(),
             }),
+            text_range: None,
         }
     }
 }
@@ -310,7 +304,9 @@ impl Default for WindowsPlatform {
     IRawElementProviderSimple,
     IRawElementProviderFragment,
     IRawElementProviderFragmentRoot,
-    IToggleProvider
+    IToggleProvider,
+    ITextProvider,
+    ITextRangeProvider
 )]
 struct WindowsProvider<T>
 where
@@ -449,6 +445,15 @@ where
                 .is_some_and(|node| node.role() == Role::CheckBox)
         {
             let provider: IToggleProvider = self.to_interface();
+            return provider.cast();
+        }
+
+        if pattern_id == UIA_TextPatternId
+            && access_tree
+                .get_node(self.node)
+                .is_some_and(|node| node.role() == Role::Label)
+        {
+            let provider: ITextProvider = self.to_interface();
             return provider.cast();
         }
 
@@ -809,6 +814,307 @@ where
     }
 }
 
+// Provides access to controls that contain text.
+impl<T> ITextProvider_Impl for WindowsProvider_Impl<T>
+where
+    T: AccessWindow,
+{
+    /// Returns the degenerate (empty) text range nearest to the specified screen coordinates.
+    #[allow(non_snake_case)]
+    fn GetSelection(&self) -> windows_core::Result<*mut SAFEARRAY> {
+        Ok(ptr::null_mut())
+    }
+
+    /// Retrieves an array of disjoint text ranges from a text-based control where each text
+    /// range represents a contiguous span of visible text.
+    #[allow(non_snake_case)]
+    fn GetVisibleRanges(&self) -> windows_core::Result<*mut SAFEARRAY> {
+        Ok(ptr::null_mut())
+    }
+
+    /// Retrieves a text range enclosing a child element such as an image, hyperlink, or other embedded object.
+    #[allow(non_snake_case)]
+    fn RangeFromChild(
+        &self,
+        child_element: Ref<IRawElementProviderSimple>,
+    ) -> windows_core::Result<ITextRangeProvider> {
+        Ok(WindowsProvider {
+            platform: self.platform.clone(),
+            access_tree: self.access_tree.clone(),
+            node: self.node,
+        }.into())
+    }
+
+    /// Retrieves a collection of text ranges that represents the currently selected text in a text-based control.
+    #[allow(non_snake_case)]
+    fn RangeFromPoint(&self, point: &UiaPoint) -> windows_core::Result<ITextRangeProvider> {
+        Ok(WindowsProvider {
+            platform: self.platform.clone(),
+            access_tree: self.access_tree.clone(),
+            node: self.node,
+        }.into())
+    }
+
+    /// Retrieves a text range that encloses the main text of a document.
+    #[allow(non_snake_case)]
+    fn DocumentRange(&self) -> windows_core::Result<ITextRangeProvider> {
+        Ok(WindowsProvider {
+            platform: self.platform.clone(),
+            access_tree: self.access_tree.clone(),
+            node: self.node,
+        }.into())
+    }
+
+    /// Retrieves a value that specifies the type of text selection that is supported by the control.
+    #[allow(non_snake_case)]
+    fn SupportedTextSelection(&self) -> windows_core::Result<SupportedTextSelection> {
+        let access_tree = self.access_tree()?;
+        let node = access_tree
+            .get_node(self.node)
+            .ok_or_else(element_not_available)?;
+
+        Ok(match node.supports_text_selection() {
+            crate::text::SupportedTextSelection::None => SupportedTextSelection_None,
+            crate::text::SupportedTextSelection::Single => SupportedTextSelection_Single,
+            crate::text::SupportedTextSelection::Multiple => SupportedTextSelection_Multiple,
+        })
+    }
+}
+
+// Provides access to a span of continuous text in a text container that implements ITextProvider or ITextProvider2.
+impl<T> ITextRangeProvider_Impl for WindowsProvider_Impl<T>
+where
+    T: AccessWindow,
+{
+    /// Returns a new ITextRangeProvider identical to the original ITextRangeProvider and
+    /// inheriting all properties of the original.
+    #[allow(non_snake_case)]
+    fn Clone(&self) -> windows_core::Result<ITextRangeProvider> {
+        // The new range can be manipulated independently from the original.
+        let access_tree = self.access_tree()?;
+        if access_tree.get_node(self.node).is_none() {
+            return Err(element_not_available());
+        }
+        Ok(WindowsProvider {
+            platform: self.platform.clone(),
+            access_tree: self.access_tree.clone(),
+            node: self.node,
+        }
+        .into())
+    }
+
+    /// Retrieves a value that specifies whether this text range has the same endpoints as another text range.
+    #[allow(non_snake_case)]
+    fn Compare(&self, range: Ref<ITextRangeProvider>) -> windows_core::Result<BOOL> {
+        // This method compares the endpoints of the two text ranges, not the text in the ranges.
+        // The ranges are identical if they share the same endpoints.
+        // If two text ranges have different endpoints, they are not identical even if the text in
+        // both ranges is exactly the same.
+        Ok(TRUE)
+    }
+
+    /// Returns a value that specifies whether two text ranges have identical endpoints.
+    #[allow(non_snake_case)]
+    fn CompareEndpoints(
+        &self,
+        endpoint: TextPatternRangeEndpoint,
+        target_range: Ref<ITextRangeProvider>,
+        target_endpoint: TextPatternRangeEndpoint,
+    ) -> windows_core::Result<i32> {
+        // Returns a negative value if the caller's endpoint occurs earlier in the text than the target endpoint.
+        // Returns zero if the caller's endpoint is at the same location as the target endpoint.
+        // Returns a positive value if the caller's endpoint occurs later in the text than the target endpoint.
+        Ok(0)
+    }
+
+    /// Normalizes the text range by the specified text unit.
+    ///
+    /// The range is expanded if it is smaller than the specified unit, or shortened if it is longer
+    /// than the specified unit.
+    #[allow(non_snake_case, non_upper_case_globals)]
+    fn ExpandToEnclosingUnit(&self, unit: TextUnit) -> windows_core::Result<()> {
+        // Client applications such as screen readers use this method to retrieve the full word,
+        // sentence, or paragraph that exists at the insertion point or caret position.
+        // Despite its name, the ITextRangeProvider::ExpandToEnclosingUnit method does not necessarily
+        // expand a text range. Instead, it "normalizes" a text range by moving the endpoints so that
+        // the range encompasses the specified text unit. The range is expanded if it is smaller
+        // than the specified unit, or shortened if it is longer than the specified unit.
+        // If the range is already an exact quantity of the specified units, it remains unchanged.
+        // It is critical that the ExpandToEnclosingUnit method always normalizes text ranges
+        // in a consistent manner; otherwise, other aspects of text range manipulation by text unit
+        // would be unpredictable. The following diagram shows how ExpandToEnclosingUnit normalizes
+        // a text range by moving the endpoints of the range.
+        // ExpandToEnclosingUnit defaults to the next largest text unit supported if the specified
+        // text unit is not supported by the control.
+        // The order, from smallest unit to largest, is as follows:
+        //     Character
+        //     Format
+        //     Word
+        //     Line
+        //     Paragraph
+        //     Page
+        //     Document
+        // ExpandToEnclosingUnit respects both visible and hidden text.
+        // Range behavior when unit is TextUnit::Format
+        // TextUnit::Format as a unit value positions the boundary of a text range to expand or
+        // move the range based on shared text attributes (format) of the text within the range. However,
+        // using the format text unit should not move or expand a text range across the boundary of
+        // an embedded object, such as an image or hyperlink.
+        // For more info, see UI Automation Text Units or Text and TextRange Control Patterns.
+        match unit {
+            TextUnit_Character => {}
+            TextUnit_Document => {}
+            TextUnit_Format => {}
+            TextUnit_Line => {}
+            TextUnit_Paragraph => {}
+            TextUnit_Page => {}
+            TextUnit_Word => {}
+            _ => unreachable!(),
+        }
+        Ok(())
+    }
+
+    /// Returns a text range subset that has the specified text attribute value.
+    #[allow(non_snake_case)]
+    fn FindAttribute(
+        &self,
+        attribute_id: UIA_TEXTATTRIBUTE_ID,
+        val: &VARIANT,
+        backward: BOOL,
+    ) -> windows_core::Result<ITextRangeProvider> {
+        // The FindAttribute method retrieves matching text regardless of whether the text is hidden
+        // or visible. Clients can use UIA_IsHiddenAttributeId to check text visibility.
+        todo!()
+    }
+
+    #[allow(non_snake_case)]
+    fn FindText(
+        &self,
+        text: &BSTR,
+        backward: BOOL,
+        ignore_case: BOOL,
+    ) -> windows_core::Result<ITextRangeProvider> {
+        todo!()
+    }
+
+    #[allow(non_snake_case)]
+    fn GetAttributeValue(
+        &self,
+        _attribute_id: UIA_TEXTATTRIBUTE_ID,
+    ) -> windows_core::Result<VARIANT> {
+        Ok(VARIANT::default())
+    }
+
+    #[allow(non_snake_case)]
+    fn GetBoundingRectangles(&self) -> windows_core::Result<*mut SAFEARRAY> {
+        // The bounding rectangle is defined by the location of the top left corner on the screen, and the dimensions.
+        // No clipping is required if the element is partly obscured or partly off-screen.
+        // The IsOffscreen property should be set to indicate whether the rectangle is actually visible.
+        // Not all points within the bounding rectangle are necessarily clickable.
+        let access_tree = self.access_tree()?;
+        let Some(node) = access_tree.get_node(self.node) else {
+            return Err(element_not_available());
+        };
+        let rect = node.bounding_rect();
+        let Some(root) = access_tree.get_node_root(self.node) else {
+            return Err(element_not_available());
+        };
+        let window_handle = root_window_handle(&access_tree, root)?;
+
+        let rect = if self.node == root && node.role() == Role::Window {
+            window_bounding_rect(window_handle)?
+        } else {
+            let origin = client_origin(window_handle)?;
+            screen_rect(rect, origin)
+        };
+        let coordinates = [rect.left, rect.top, rect.width, rect.height];
+
+        // SAFETY: The array has exactly `coordinates.len()` VT_R8 elements, and each
+        // call supplies an in-bounds index and a valid pointer to an f64 value.
+        let array = unsafe {
+            let array = SafeArrayCreateVector(VT_R8, 0, coordinates.len() as u32);
+            if array.is_null() {
+                return Err(windows_core::Error::from_hresult(E_OUTOFMEMORY));
+            }
+
+            for (index, value) in coordinates.iter().enumerate() {
+                let index = index as i32;
+                if let Err(error) = SafeArrayPutElement(array, &index, ptr::from_ref(value).cast())
+                {
+                    let _ = SafeArrayDestroy(array);
+                    return Err(error);
+                }
+            }
+
+            array
+        };
+
+        Ok(array)
+    }
+
+    #[allow(non_snake_case)]
+    fn GetEnclosingElement(&self) -> windows_core::Result<IRawElementProviderSimple> {
+        todo!()
+    }
+
+    #[allow(non_snake_case)]
+    fn GetText(&self, maxlength: i32) -> windows_core::Result<BSTR> {
+        Ok(BSTR::from("Hello"))
+    }
+
+    #[allow(non_snake_case)]
+    fn Move(&self, unit: TextUnit, count: i32) -> windows_core::Result<i32> {
+        Ok(0)
+    }
+
+    #[allow(non_snake_case)]
+    fn MoveEndpointByUnit(
+        &self,
+        endpoint: TextPatternRangeEndpoint,
+        unit: TextUnit,
+        count: i32,
+    ) -> windows_core::Result<i32> {
+        Ok(0)
+    }
+
+    #[allow(non_snake_case)]
+    fn MoveEndpointByRange(
+        &self,
+        endpoint: TextPatternRangeEndpoint,
+        target_range: Ref<ITextRangeProvider>,
+        target_end_point: TextPatternRangeEndpoint,
+    ) -> windows_core::Result<()> {
+        Ok(())
+    }
+
+    /// Selects the span of text that corresponds to this text range, and removes any previous selection.
+    #[allow(non_snake_case)]
+    fn Select(&self) -> windows_core::Result<()> {
+        // Providing a degenerate text range will move the text insertion point.
+        Ok(())
+    }
+
+    #[allow(non_snake_case)]
+    fn AddToSelection(&self) -> windows_core::Result<()> {
+        Ok(())
+    }
+
+    #[allow(non_snake_case)]
+    fn RemoveFromSelection(&self) -> windows_core::Result<()> {
+        Ok(())
+    }
+
+    #[allow(non_snake_case)]
+    fn ScrollIntoView(&self, aligntotop: BOOL) -> windows_core::Result<()> {
+        Ok(())
+    }
+
+    #[allow(non_snake_case)]
+    fn GetChildren(&self) -> windows_core::Result<*mut SAFEARRAY> {
+        Ok(ptr::null_mut())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     extern crate std;
@@ -905,6 +1211,65 @@ mod tests {
         assert_eq!(unsafe { toggle.ToggleState() }.unwrap(), ToggleState_On);
         unsafe { toggle.Toggle() }.unwrap();
         assert_eq!(toggle_count.get(), 1);
+    }
+
+    #[test]
+    fn text_provider_reports_the_configured_selection_support() {
+        let selections = [
+            (
+                crate::text::SupportedTextSelection::None,
+                SupportedTextSelection_None,
+            ),
+            (
+                crate::text::SupportedTextSelection::Single,
+                SupportedTextSelection_Single,
+            ),
+            (
+                crate::text::SupportedTextSelection::Multiple,
+                SupportedTextSelection_Multiple,
+            ),
+        ];
+
+        for (selection, expected) in selections {
+            let tree = AccessTree::<TestWindow>::new();
+            let mut node = crate::AccessNode::new();
+            node.set_role(Role::Label);
+            node.set_text_supported_text_selection(selection);
+            let node = tree.insert_node(node, None);
+            let provider: IRawElementProviderSimple = WindowsProvider {
+                platform: Rc::new(WindowsPlatformState {
+                    id: 1,
+                    com_apartment: OnceCell::new(),
+                }),
+                access_tree: tree.downgrade(),
+                node,
+            }
+            .into();
+
+            let pattern = unsafe { provider.GetPatternProvider(UIA_TextPatternId) }.unwrap();
+            let text = pattern.cast::<ITextProvider>().unwrap();
+
+            assert_eq!(unsafe { text.SupportedTextSelection() }.unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn cloning_a_text_range_returns_an_independent_provider() {
+        let tree = AccessTree::<TestWindow>::new();
+        let node = tree.insert_node(crate::AccessNode::new(), None);
+        let range: ITextRangeProvider = WindowsProvider {
+            platform: Rc::new(WindowsPlatformState {
+                id: 1,
+                com_apartment: OnceCell::new(),
+            }),
+            access_tree: tree.downgrade(),
+            node,
+        }
+        .into();
+
+        let cloned = unsafe { range.Clone() }.unwrap();
+
+        assert_ne!(range.as_raw(), cloned.as_raw());
     }
 
     #[test]

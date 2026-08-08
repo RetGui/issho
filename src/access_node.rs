@@ -1,15 +1,18 @@
+use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::String;
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use smol_str::SmolStr;
+
 use smolvec::SmolVec;
 
 use crate::AccessKey;
 use crate::access_rect::AccessRect;
 use crate::live_setting::LiveSetting;
 use crate::roles::Role;
+use crate::text::{SupportedTextSelection, TextData};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -33,6 +36,9 @@ pub struct AccessNode {
     role: Role,
     value: String,
     toggle_action: Option<Rc<dyn Fn()>>,
+
+    text_selection: SupportedTextSelection,
+    text_data: Option<Box<TextData>>,
 }
 
 impl Clone for AccessNode {
@@ -49,6 +55,8 @@ impl Clone for AccessNode {
             role: self.role,
             value: self.value.clone(),
             toggle_action: self.toggle_action.clone(),
+            text_selection: self.text_selection,
+            text_data: None,
         }
     }
 }
@@ -68,6 +76,8 @@ impl AccessNode {
             role: Role::GenericContainer,
             value: String::new(),
             toggle_action: None,
+            text_selection: SupportedTextSelection::None,
+            text_data: None,
         }
     }
 
@@ -164,6 +174,19 @@ impl AccessNode {
 
     pub(crate) fn toggle_action(&self) -> Option<Rc<dyn Fn()>> {
         self.toggle_action.clone()
+    }
+
+    /// Sets the supported text selection mode.
+    pub fn set_text_supported_text_selection(
+        &mut self,
+        text_selection_support: SupportedTextSelection,
+    ) {
+        self.text_selection = text_selection_support;
+    }
+
+    /// Returns the supported text selection of this node.
+    pub fn supports_text_selection(&self) -> SupportedTextSelection {
+        self.text_selection
     }
 }
 

@@ -1,6 +1,8 @@
 use std::{error::Error, io, num::NonZeroU32, rc::Rc};
 
-use issho::{AccessKey, AccessNode, AccessRect, AccessTree, LiveSetting, Role};
+use issho::{
+    AccessKey, AccessNode, AccessRect, AccessTree, LiveSetting, Role, SupportedTextSelection,
+};
 use softbuffer::{Context, Surface};
 use vello_cpu::{Pixmap, RenderContext, Resources, color::palette::css, kurbo::Rect};
 use winit::{
@@ -160,6 +162,7 @@ impl ApplicationHandler for App {
 
         let mut value = AccessNode::new();
         value.set_role(Role::Label);
+        value.set_text_supported_text_selection(SupportedTextSelection::Single);
         value.set_name("0");
         value.set_live_setting(LiveSetting::Assertive);
         let value = self.access_tree.insert_node(value, Some(root));

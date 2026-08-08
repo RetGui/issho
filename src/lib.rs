@@ -12,6 +12,7 @@ mod live_setting;
 mod roles;
 
 pub mod platforms;
+mod text;
 
 pub use crate::access_node::AccessNode;
 pub use crate::access_property::{AccessProperty, AccessPropertyValue};
@@ -20,5 +21,6 @@ pub use crate::access_tree::AccessTree;
 pub use crate::access_window::AccessWindow;
 pub use crate::live_setting::LiveSetting;
 pub use crate::roles::Role;
+pub use crate::text::SupportedTextSelection;
 
 pub use slotmap::DefaultKey as AccessKey;
