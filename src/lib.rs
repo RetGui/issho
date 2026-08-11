@@ -12,9 +12,10 @@ mod live_setting;
 mod roles;
 
 mod access_event;
+mod error;
+mod selection_data;
 mod text;
 
-mod error;
 pub mod platforms;
 
 pub use crate::access_event::AccessEvent;
@@ -26,6 +27,7 @@ pub use crate::access_window::{AccessNodeContext, AccessWindow};
 pub use crate::error::IsshoError;
 pub use crate::live_setting::LiveSetting;
 pub use crate::roles::Role;
+pub use crate::selection_data::SelectionData;
 pub use crate::text::SupportedTextSelection;
 
 pub use slotmap::DefaultKey as AccessKey;

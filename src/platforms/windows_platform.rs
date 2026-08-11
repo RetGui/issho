@@ -17,34 +17,7 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::System::Ole::{SafeArrayCreateVector, SafeArrayDestroy, SafeArrayPutElement};
 use windows::Win32::System::Variant::{VARIANT, VT_I4, VT_R8};
-use windows::Win32::UI::Accessibility::{
-    Assertive as UiaAssertive, IRawElementProviderFragment, IRawElementProviderFragment_Impl,
-    IRawElementProviderFragmentRoot, IRawElementProviderFragmentRoot_Impl,
-    IRawElementProviderSimple, IRawElementProviderSimple_Impl, ITextProvider, ITextProvider_Impl,
-    ITextRangeProvider, ITextRangeProvider_Impl, IToggleProvider, IToggleProvider_Impl,
-    NavigateDirection, NavigateDirection_FirstChild, NavigateDirection_LastChild,
-    NavigateDirection_NextSibling, NavigateDirection_Parent, NavigateDirection_PreviousSibling,
-    Off as UiaOff, Polite as UiaPolite, ProviderOptions, ProviderOptions_ServerSideProvider,
-    ProviderOptions_UseComThreading, SupportedTextSelection, SupportedTextSelection_Single,
-    TextPatternRangeEndpoint, TextUnit, TextUnit_Character, ToggleState, ToggleState_Off,
-    ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId,
-    UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId,
-    UIA_E_ELEMENTNOTAVAILABLE, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId,
-    UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId,
-    UIA_ImageControlTypeId, UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId,
-    UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId,
-    UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId,
-    UIA_MenuControlTypeId, UIA_MenuItemControlTypeId, UIA_NamePropertyId,
-    UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId,
-    UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId,
-    UIA_SeparatorControlTypeId, UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID,
-    UIA_TabControlTypeId, UIA_TabItemControlTypeId, UIA_TextControlTypeId, UIA_TextPatternId,
-    UIA_TogglePatternId, UIA_ToggleToggleStatePropertyId, UIA_ToolBarControlTypeId,
-    UIA_TreeControlTypeId, UIA_TreeItemControlTypeId, UIA_ValueValuePropertyId,
-    UIA_WindowControlTypeId, UiaAppendRuntimeId, UiaHostProviderFromHwnd, UiaPoint,
-    UiaRaiseAutomationEvent, UiaRaiseAutomationPropertyChangedEvent, UiaRect,
-    UiaReturnRawElementProvider, UiaRootObjectId,
-};
+use windows::Win32::UI::Accessibility::{Assertive as UiaAssertive, IRawElementProviderFragment, IRawElementProviderFragment_Impl, IRawElementProviderFragmentRoot, IRawElementProviderFragmentRoot_Impl, IRawElementProviderSimple, IRawElementProviderSimple_Impl, ITextProvider, ITextProvider_Impl, ITextRangeProvider, ITextRangeProvider_Impl, ISelectionProvider, IToggleProvider, IToggleProvider_Impl, NavigateDirection, NavigateDirection_FirstChild, NavigateDirection_LastChild, NavigateDirection_NextSibling, NavigateDirection_Parent, NavigateDirection_PreviousSibling, Off as UiaOff, Polite as UiaPolite, ProviderOptions, ProviderOptions_ServerSideProvider, ProviderOptions_UseComThreading, SupportedTextSelection, SupportedTextSelection_Single, TextPatternRangeEndpoint, TextUnit, TextUnit_Character, ToggleState, ToggleState_Off, ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId, UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId, UIA_E_ELEMENTNOTAVAILABLE, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId, UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId, UIA_ImageControlTypeId, UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId, UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId, UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId, UIA_MenuControlTypeId, UIA_MenuItemControlTypeId, UIA_NamePropertyId, UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId, UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId, UIA_SeparatorControlTypeId, UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID, UIA_TabControlTypeId, UIA_TabItemControlTypeId, UIA_TextControlTypeId, UIA_TextPatternId, UIA_TogglePatternId, UIA_ToggleToggleStatePropertyId, UIA_ToolBarControlTypeId, UIA_TreeControlTypeId, UIA_TreeItemControlTypeId, UIA_ValueValuePropertyId, UIA_WindowControlTypeId, UiaAppendRuntimeId, UiaHostProviderFromHwnd, UiaPoint, UiaRaiseAutomationEvent, UiaRaiseAutomationPropertyChangedEvent, UiaRect, UiaReturnRawElementProvider, UiaRootObjectId, ISelectionProvider_Impl};
 use windows::Win32::UI::Accessibility::{
     ISelectionItemProvider, ISelectionItemProvider_Impl, SupportedTextSelection_Multiple,
     SupportedTextSelection_None, TextUnit_Document, TextUnit_Format, TextUnit_Line, TextUnit_Page,
@@ -340,7 +313,8 @@ impl Default for WindowsPlatform {
     IRawElementProviderFragmentRoot,
     IToggleProvider,
     ITextProvider,
-    ITextRangeProvider
+    ITextRangeProvider,
+    ISelectionProvider,
 )]
 struct WindowsProvider<T, U>
 where
@@ -1178,6 +1152,39 @@ where
     #[allow(non_snake_case)]
     fn GetChildren(&self) -> windows_core::Result<*mut SAFEARRAY> {
         Ok(ptr::null_mut())
+    }
+}
+
+// Exposes methods and properties to support UI Automation client access to controls that act as containers
+// for a collection of individual, selectable child items. The children of this control must
+// implement ISelectionItemProvider.
+impl<T, U> ISelectionProvider_Impl for WindowsProvider_Impl<T, U>
+where
+    T: AccessWindow,
+    U: AccessNodeContext,
+{
+    /// Retrieves a UI Automation provider for each child element that is selected.
+    #[allow(non_snake_case)]
+    fn GetSelection(&self) -> windows_core::Result<*mut SAFEARRAY> {
+        // A default empty array is returned by UIAutoCore.dll when the provider doesn't supply a value.
+        todo!()
+    }
+
+    /// Gets a value that specifies whether the UI Automation provider allows more than one child element to be selected concurrently.
+    #[allow(non_snake_case)]
+    fn CanSelectMultiple(&self) -> windows_core::Result<BOOL> {
+        // This property may be dynamic. For example, in rare cases a control might allow multiple items to
+        // be selected on initialization but subsequently allow only single selections to be made.
+        todo!()
+    }
+
+    /// Gets a value that specifies whether the UI Automation provider requires at least one child element to be selected.
+    #[allow(non_snake_case)]
+    fn IsSelectionRequired(&self) -> windows_core::Result<BOOL> {
+        // This property can be dynamic. For example, the initial state of a control might not have any
+        // items selected by default, meaning that IsSelectionRequired is false. However, after an item
+        // is selected, the control must always have at least one item selected.
+        todo!()
     }
 }
 

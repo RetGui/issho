@@ -7,12 +7,12 @@ use smol_str::SmolStr;
 
 use smolvec::SmolVec;
 
-use crate::AccessKey;
 use crate::access_rect::AccessRect;
 use crate::access_window::AccessNodeContext;
 use crate::live_setting::LiveSetting;
 use crate::roles::Role;
 use crate::text::{SupportedTextSelection, TextData};
+use crate::{AccessKey, SelectionData};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -39,6 +39,8 @@ pub struct AccessNode<T: AccessNodeContext> {
     text_selection: SupportedTextSelection,
     text_data: Option<Box<TextData>>,
     context: Option<T>,
+
+    selection_data: Option<SelectionData>,
 }
 
 impl<T: AccessNodeContext> Clone for AccessNode<T> {
@@ -57,6 +59,7 @@ impl<T: AccessNodeContext> Clone for AccessNode<T> {
             text_selection: self.text_selection,
             text_data: None,
             context: self.context.clone(),
+            selection_data: self.selection_data.clone(),
         }
     }
 }
@@ -78,6 +81,7 @@ impl<T: AccessNodeContext> AccessNode<T> {
             text_selection: SupportedTextSelection::None,
             text_data: None,
             context: None,
+            selection_data: None,
         }
     }
 
