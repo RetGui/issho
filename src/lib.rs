@@ -27,7 +27,7 @@ pub use crate::access_window::{AccessNodeContext, AccessWindow};
 pub use crate::error::IsshoError;
 pub use crate::live_setting::LiveSetting;
 pub use crate::roles::Role;
-pub use crate::selection_data::SelectionData;
+pub use crate::selection_data::{SelectionData, SelectionGroup, SelectionGroupItem};
 pub use crate::text::SupportedTextSelection;
 
 pub use slotmap::DefaultKey as AccessKey;

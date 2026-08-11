@@ -4,4 +4,7 @@ use core::ops::Range;
 pub enum AccessEvent {
     TextSelection(Range<u64>),
     Toggle,
+    Select,
+    AddToSelection,
+    UnSelect,
 }

@@ -7,6 +7,7 @@ use core::ptr;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use smallvec::SmallVec;
 
 use windows::Win32::Foundation::{
     E_INVALIDARG, E_OUTOFMEMORY, HWND as WindowHandle, LPARAM, LRESULT, POINT, RECT, TRUE, WPARAM,
@@ -20,30 +21,32 @@ use windows::Win32::System::Variant::{VARIANT, VT_I4, VT_R8, VT_UNKNOWN};
 use windows::Win32::UI::Accessibility::{
     Assertive as UiaAssertive, IRawElementProviderFragment, IRawElementProviderFragment_Impl,
     IRawElementProviderFragmentRoot, IRawElementProviderFragmentRoot_Impl,
-    IRawElementProviderSimple, IRawElementProviderSimple_Impl, ISelectionProvider,
-    ISelectionProvider_Impl, ITextProvider, ITextProvider_Impl, ITextRangeProvider,
-    ITextRangeProvider_Impl, IToggleProvider, IToggleProvider_Impl, NavigateDirection,
-    NavigateDirection_FirstChild, NavigateDirection_LastChild, NavigateDirection_NextSibling,
-    NavigateDirection_Parent, NavigateDirection_PreviousSibling, Off as UiaOff,
-    Polite as UiaPolite, ProviderOptions, ProviderOptions_ServerSideProvider,
-    ProviderOptions_UseComThreading, SupportedTextSelection, SupportedTextSelection_Single,
-    TextPatternRangeEndpoint, TextUnit, TextUnit_Character, ToggleState, ToggleState_Off,
-    ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId,
-    UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId,
-    UIA_E_ELEMENTNOTAVAILABLE, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId,
-    UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId,
-    UIA_ImageControlTypeId, UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId,
-    UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId,
-    UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId,
-    UIA_MenuControlTypeId, UIA_MenuItemControlTypeId, UIA_NamePropertyId,
-    UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId,
-    UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId,
-    UIA_SeparatorControlTypeId, UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID,
-    UIA_TabControlTypeId, UIA_TabItemControlTypeId, UIA_TextControlTypeId, UIA_TextPatternId,
-    UIA_TogglePatternId, UIA_ToggleToggleStatePropertyId, UIA_ToolBarControlTypeId,
-    UIA_TreeControlTypeId, UIA_TreeItemControlTypeId, UIA_ValueValuePropertyId,
-    UIA_WindowControlTypeId, UiaAppendRuntimeId, UiaHostProviderFromHwnd, UiaPoint,
-    UiaRaiseAutomationEvent, UiaRaiseAutomationPropertyChangedEvent, UiaRect,
+    IRawElementProviderSimple, IRawElementProviderSimple_Impl, ISelectionItemProvider,
+    ISelectionItemProvider_Impl, ISelectionProvider, ISelectionProvider_Impl, ITextProvider,
+    ITextProvider_Impl, ITextRangeProvider, ITextRangeProvider_Impl, IToggleProvider,
+    IToggleProvider_Impl, NavigateDirection, NavigateDirection_FirstChild,
+    NavigateDirection_LastChild, NavigateDirection_NextSibling, NavigateDirection_Parent,
+    NavigateDirection_PreviousSibling, Off as UiaOff, Polite as UiaPolite, ProviderOptions,
+    ProviderOptions_ServerSideProvider, ProviderOptions_UseComThreading, SupportedTextSelection,
+    SupportedTextSelection_Single, TextPatternRangeEndpoint, TextUnit, TextUnit_Character,
+    ToggleState, ToggleState_Off, ToggleState_On, UIA_AutomationFocusChangedEventId,
+    UIA_ButtonControlTypeId, UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId,
+    UIA_ControlTypePropertyId, UIA_E_ELEMENTNOTAVAILABLE, UIA_EVENT_ID, UIA_EditControlTypeId,
+    UIA_FrameworkIdPropertyId, UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId,
+    UIA_HyperlinkControlTypeId, UIA_ImageControlTypeId, UIA_IsContentElementPropertyId,
+    UIA_IsControlElementPropertyId, UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId,
+    UIA_ListControlTypeId, UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId,
+    UIA_LiveSettingPropertyId, UIA_MenuControlTypeId, UIA_MenuItemControlTypeId,
+    UIA_NamePropertyId, UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID,
+    UIA_PaneControlTypeId, UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId,
+    UIA_ScrollBarControlTypeId, UIA_SelectionItem_ElementAddedToSelectionEventId,
+    UIA_SelectionItem_ElementRemovedFromSelectionEventId, UIA_SelectionItem_ElementSelectedEventId,
+    UIA_SelectionItemPatternId, UIA_SelectionPatternId, UIA_SeparatorControlTypeId,
+    UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID, UIA_TabControlTypeId, UIA_TabItemControlTypeId,
+    UIA_TextControlTypeId, UIA_TextPatternId, UIA_TogglePatternId, UIA_ToggleToggleStatePropertyId,
+    UIA_ToolBarControlTypeId, UIA_TreeControlTypeId, UIA_TreeItemControlTypeId,
+    UIA_ValueValuePropertyId, UIA_WindowControlTypeId, UiaAppendRuntimeId, UiaHostProviderFromHwnd,
+    UiaPoint, UiaRaiseAutomationEvent, UiaRaiseAutomationPropertyChangedEvent, UiaRect,
     UiaReturnRawElementProvider, UiaRootObjectId,
 };
 use windows::Win32::UI::Accessibility::{
@@ -61,7 +64,7 @@ use crate::access_window::AccessNodeContext;
 use crate::platforms::AccessPlatform;
 use crate::{
     AccessEvent, AccessKey, AccessProperty, AccessPropertyValue, AccessRect, AccessTree,
-    AccessWindow, LiveSetting, Role,
+    AccessWindow, LiveSetting, Role, SelectionData,
 };
 
 // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-providersoverview
@@ -165,6 +168,50 @@ fn get_window_handle<T: HasWindowHandle>(window: &T) -> windows_core::Result<Win
 
 fn element_not_available() -> windows_core::Error {
     windows_core::Error::from_hresult(windows_core::HRESULT(UIA_E_ELEMENTNOTAVAILABLE as i32))
+}
+
+fn selection_not_supported() -> windows_core::Error {
+    windows_core::Error::from_hresult(windows_core::HRESULT(UIA_E_NOTSUPPORTED as i32))
+}
+
+fn selection_group_children<T: AccessWindow, U: AccessNodeContext>(
+    access_tree: &AccessTree<T, U>,
+    selection_group: AccessKey,
+) -> windows_core::Result<SmallVec<[AccessKey; 4]>> {
+    let node = access_tree
+        .get_node(selection_group)
+        .ok_or_else(element_not_available)?;
+    let Some(SelectionData::SelectionGroup(selection_group)) = node.selection_data() else {
+        return Err(selection_not_supported());
+    };
+
+    Ok(selection_group.selected_children.clone())
+}
+
+fn raise_selection_item_events(
+    previous: &[AccessKey],
+    current: &[AccessKey],
+    mut raise: impl FnMut(AccessKey, UIA_EVENT_ID) -> windows_core::Result<()>,
+) -> windows_core::Result<()> {
+    if previous == current {
+        return Ok(());
+    }
+
+    if let [selected] = current {
+        return raise(*selected, UIA_SelectionItem_ElementSelectedEventId);
+    }
+
+    for added in current.iter().filter(|item| !previous.contains(item)) {
+        raise(*added, UIA_SelectionItem_ElementAddedToSelectionEventId)?;
+    }
+    for removed in previous.iter().filter(|item| !current.contains(item)) {
+        raise(
+            *removed,
+            UIA_SelectionItem_ElementRemovedFromSelectionEventId,
+        )?;
+    }
+
+    Ok(())
 }
 
 fn root_window_handle<T: AccessWindow, U: AccessNodeContext>(
@@ -341,7 +388,8 @@ impl Default for WindowsPlatform {
     IToggleProvider,
     ITextProvider,
     ITextRangeProvider,
-    ISelectionProvider
+    ISelectionProvider,
+    ISelectionItemProvider
 )]
 struct WindowsProvider<T, U>
 where
@@ -357,6 +405,41 @@ where
 impl<T: AccessWindow, U: AccessNodeContext> WindowsProvider<T, U> {
     fn access_tree(&self) -> windows_core::Result<AccessTree<T, U>> {
         self.access_tree.upgrade().ok_or_else(element_not_available)
+    }
+
+    fn dispatch_selection_action(&self, event: AccessEvent) -> windows_core::Result<()> {
+        let access_tree = self.access_tree()?;
+        let selection_group = {
+            let node = access_tree
+                .get_node(self.node)
+                .ok_or_else(element_not_available)?;
+            let Some(SelectionData::SelectionGroupItem(selection_group_item)) =
+                node.selection_data()
+            else {
+                return Err(selection_not_supported());
+            };
+            selection_group_item.selection_group
+        };
+        let previous_selection = selection_group_children(&access_tree, selection_group)?;
+
+        access_tree
+            .dispatch_access_event(self.node, event)
+            .map_err(|_| element_not_available())?;
+
+        let current_selection = selection_group_children(&access_tree, selection_group)?;
+        raise_selection_item_events(&previous_selection, &current_selection, |node, event_id| {
+            if !access_tree.contains_node(node) {
+                return Err(element_not_available());
+            }
+            let provider: IRawElementProviderSimple = WindowsProvider {
+                platform: self.platform.clone(),
+                access_tree: self.access_tree.clone(),
+                node,
+                text_range: None,
+            }
+            .into();
+            unsafe { UiaRaiseAutomationEvent(&provider, event_id) }
+        })
     }
 }
 
@@ -484,21 +567,37 @@ where
     #[allow(non_snake_case)]
     fn GetPatternProvider(&self, pattern_id: UIA_PATTERN_ID) -> windows_core::Result<IUnknown> {
         let access_tree = self.access_tree()?;
-        if pattern_id == UIA_TogglePatternId
-            && access_tree
-                .get_node(self.node)
-                .is_some_and(|node| node.role() == Role::CheckBox)
-        {
+        let node = access_tree
+            .get_node(self.node)
+            .ok_or_else(element_not_available)?;
+
+        if pattern_id == UIA_TogglePatternId && node.role() == Role::CheckBox {
             let provider: IToggleProvider = self.to_interface();
             return provider.cast();
         }
 
-        if pattern_id == UIA_TextPatternId
-            && access_tree
-                .get_node(self.node)
-                .is_some_and(|node| node.role() == Role::Label)
-        {
+        if pattern_id == UIA_TextPatternId && node.role() == Role::Label {
             let provider: ITextProvider = self.to_interface();
+            return provider.cast();
+        }
+
+        if pattern_id == UIA_SelectionPatternId
+            && matches!(
+                node.selection_data(),
+                Some(SelectionData::SelectionGroup(_))
+            )
+        {
+            let provider: ISelectionProvider = self.to_interface();
+            return provider.cast();
+        }
+
+        if pattern_id == UIA_SelectionItemPatternId
+            && matches!(
+                node.selection_data(),
+                Some(SelectionData::SelectionGroupItem(_))
+            )
+        {
+            let provider: ISelectionItemProvider = self.to_interface();
             return provider.cast();
         }
 
@@ -530,13 +629,14 @@ where
         if property_id == UIA_ValueValuePropertyId {
             return Ok(string_variant(node.value()));
         }
-        if property_id == UIA_ToggleToggleStatePropertyId
-            && (role == Role::CheckBox || role == Role::RadioButton)
-        {
+        if property_id == UIA_ToggleToggleStatePropertyId && role == Role::CheckBox {
             return Ok(i32_variant(uia_toggle_state(node.checked()).0));
         }
-        if property_id == UIA_SelectionItemIsSelectedPropertyId && role == Role::RadioButton {
-            return Ok(bool_variant(node.checked()));
+        if property_id == UIA_SelectionItemIsSelectedPropertyId
+            && let Some(SelectionData::SelectionGroupItem(selection_group_item)) =
+                node.selection_data()
+        {
+            return Ok(bool_variant(selection_group_item.is_selected));
         }
         if property_id == UIA_LiveSettingPropertyId {
             return Ok(i32_variant(uia_live_setting(node.live_setting())));
@@ -1198,11 +1298,11 @@ where
         let node = access_tree
             .get_node(self.node)
             .ok_or_else(element_not_available)?;
-        let selection_data = node.selection_data().ok_or_else(|| {
-            windows_core::Error::from_hresult(windows_core::HRESULT(UIA_E_NOTSUPPORTED as i32))
-        })?;
+        let Some(SelectionData::SelectionGroup(selection_group)) = node.selection_data() else {
+            return Err(selection_not_supported());
+        };
 
-        if selection_data
+        if selection_group
             .selected_children
             .iter()
             .any(|child| !access_tree.contains_node(*child))
@@ -1210,14 +1310,14 @@ where
             return Err(element_not_available());
         }
 
-        let child_count = i32::try_from(selection_data.selected_children.len())
+        let child_count = i32::try_from(selection_group.selected_children.len())
             .map_err(|_| windows_core::Error::from_hresult(E_OUTOFMEMORY))?;
         let array = unsafe { SafeArrayCreateVector(VT_UNKNOWN, 0, child_count as u32) };
         if array.is_null() {
             return Err(windows_core::Error::from_hresult(E_OUTOFMEMORY));
         }
 
-        for (index, child) in selection_data.selected_children.iter().enumerate() {
+        for (index, child) in selection_group.selected_children.iter().enumerate() {
             let provider: IRawElementProviderSimple = WindowsProvider {
                 platform: self.platform.clone(),
                 access_tree: self.access_tree.clone(),
@@ -1230,9 +1330,7 @@ where
             // SAFETY: `array` is a VT_UNKNOWN SAFEARRAY with `child_count` elements,
             // `index` is in bounds, and `provider` is a valid COM interface pointer.
             // VT_UNKNOWN elements take the interface pointer directly and AddRef it.
-            if let Err(error) =
-                unsafe { SafeArrayPutElement(array, &index, provider.as_raw()) }
-            {
+            if let Err(error) = unsafe { SafeArrayPutElement(array, &index, provider.as_raw()) } {
                 let _ = unsafe { SafeArrayDestroy(array) };
                 return Err(error);
             }
@@ -1250,11 +1348,11 @@ where
         let node = access_tree
             .get_node(self.node)
             .ok_or_else(element_not_available)?;
-        let selection_data = node.selection_data().ok_or_else(|| {
-            windows_core::Error::from_hresult(windows_core::HRESULT(UIA_E_NOTSUPPORTED as i32))
-        })?;
+        let Some(SelectionData::SelectionGroup(selection_group)) = node.selection_data() else {
+            return Err(selection_not_supported());
+        };
 
-        Ok(selection_data.multiple_selectable.into())
+        Ok(selection_group.multiple_selectable.into())
     }
 
     /// Gets a value that specifies whether the UI Automation provider requires at least one child element to be selected.
@@ -1267,11 +1365,98 @@ where
         let node = access_tree
             .get_node(self.node)
             .ok_or_else(element_not_available)?;
-        let selection_data = node.selection_data().ok_or_else(|| {
-            windows_core::Error::from_hresult(windows_core::HRESULT(UIA_E_NOTSUPPORTED as i32))
-        })?;
+        let Some(SelectionData::SelectionGroup(selection_group)) = node.selection_data() else {
+            return Err(selection_not_supported());
+        };
 
-        Ok(selection_data.is_mandatory.into())
+        Ok(selection_group.is_mandatory.into())
+    }
+}
+
+// Exposes methods and properties to support UI Automation client access to individual, selectable
+// child controls of containers that implement ISelectionProvider.
+impl<T, U> ISelectionItemProvider_Impl for WindowsProvider_Impl<T, U>
+where
+    T: AccessWindow,
+    U: AccessNodeContext,
+{
+    /// Deselects any selected items and then selects the current element.
+    #[allow(non_snake_case)]
+    fn Select(&self) -> windows_core::Result<()> {
+        // If the current element isn’t selected, this method deselects any selected items and
+        // then selects the current element. If the current element is already selected,
+        // this method does nothing.
+        self.dispatch_selection_action(AccessEvent::Select)
+    }
+
+    /// Adds the current element to the collection of selected items.
+    #[allow(non_snake_case)]
+    fn AddToSelection(&self) -> windows_core::Result<()> {
+        // If the result of a call to ISelectionItemProvider::AddToSelection is that a single
+        // item is selected, then send an UIA_SelectionItem_ElementSelectedEventId event
+        // for that element; otherwise send an UIA_SelectionItem_ElementAddedToSelectionEventId or
+        // UIA_SelectionItem_ElementRemovedFromSelectionEventId event as appropriate.
+        // Note: This rule does not depend on whether the container allows single or
+        // multiple selection, or on what method was used to change the selection.
+        // Only the result matters.
+        self.dispatch_selection_action(AccessEvent::AddToSelection)
+    }
+
+    /// Removes the current element from the collection of selected items.
+    #[allow(non_snake_case)]
+    fn RemoveFromSelection(&self) -> windows_core::Result<()> {
+        // Send an UIA_SelectionItem_ElementRemovedFromSelectionEventId event as appropriate.
+        self.dispatch_selection_action(AccessEvent::UnSelect)
+    }
+
+    /// Indicates whether an item is selected.
+    #[allow(non_snake_case)]
+    fn IsSelected(&self) -> windows_core::Result<BOOL> {
+        let access_tree = self.access_tree()?;
+        let node = access_tree
+            .get_node(self.node)
+            .ok_or_else(element_not_available)?;
+        let Some(SelectionData::SelectionGroupItem(selection_group_item)) = node.selection_data()
+        else {
+            return Err(selection_not_supported());
+        };
+
+        Ok(selection_group_item.is_selected.into())
+    }
+
+    /// Specifies the provider that implements ISelectionProvider and acts as the container for the calling object.
+    #[allow(non_snake_case)]
+    fn SelectionContainer(&self) -> windows_core::Result<IRawElementProviderSimple> {
+        let access_tree = self.access_tree()?;
+        let selection_group = {
+            let node = access_tree
+                .get_node(self.node)
+                .ok_or_else(element_not_available)?;
+            let Some(SelectionData::SelectionGroupItem(selection_group_item)) =
+                node.selection_data()
+            else {
+                return Err(selection_not_supported());
+            };
+            selection_group_item.selection_group
+        };
+
+        let selection_group_node = access_tree
+            .get_node(selection_group)
+            .ok_or_else(element_not_available)?;
+        if !matches!(
+            selection_group_node.selection_data(),
+            Some(SelectionData::SelectionGroup(_))
+        ) {
+            return Err(selection_not_supported());
+        }
+
+        Ok(WindowsProvider {
+            platform: self.platform.clone(),
+            access_tree: self.access_tree.clone(),
+            node: selection_group,
+            text_range: None,
+        }
+        .into())
     }
 }
 
@@ -1363,6 +1548,48 @@ mod tests {
     }
 
     #[test]
+    fn selection_item_events_follow_the_resulting_selection() {
+        fn events(
+            previous: &[AccessKey],
+            current: &[AccessKey],
+        ) -> std::vec::Vec<(AccessKey, UIA_EVENT_ID)> {
+            let mut events = std::vec::Vec::new();
+            raise_selection_item_events(previous, current, |node, event_id| {
+                events.push((node, event_id));
+                Ok(())
+            })
+            .unwrap();
+            events
+        }
+
+        let tree = AccessTree::<TestWindow, ()>::new();
+        let first = tree.insert_node(crate::AccessNode::new(), None);
+        let second = tree.insert_node(crate::AccessNode::new(), None);
+        let third = tree.insert_node(crate::AccessNode::new(), None);
+
+        assert!(events(&[first], &[first]).is_empty());
+        assert_eq!(
+            events(&[], &[first]),
+            [(first, UIA_SelectionItem_ElementSelectedEventId)]
+        );
+        assert_eq!(
+            events(&[first], &[first, second]),
+            [(second, UIA_SelectionItem_ElementAddedToSelectionEventId)]
+        );
+        assert_eq!(
+            events(&[first, second], &[second]),
+            [(second, UIA_SelectionItem_ElementSelectedEventId)]
+        );
+        assert_eq!(
+            events(&[first, second], &[second, third]),
+            [
+                (third, UIA_SelectionItem_ElementAddedToSelectionEventId),
+                (first, UIA_SelectionItem_ElementRemovedFromSelectionEventId),
+            ]
+        );
+    }
+
+    #[test]
     fn com_initialization_is_balanced_and_idempotent() {
         std::thread::spawn(|| {
             unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
@@ -1430,10 +1657,12 @@ mod tests {
         for is_mandatory in [false, true] {
             let tree = AccessTree::<TestWindow, ()>::new();
             let mut node = crate::AccessNode::new();
-            node.set_selection_data(Some(crate::SelectionData {
-                is_mandatory,
-                ..Default::default()
-            }));
+            node.set_selection_data(Some(crate::SelectionData::SelectionGroup(
+                crate::SelectionGroup {
+                    is_mandatory,
+                    ..Default::default()
+                },
+            )));
             let node = tree.insert_node(node, None);
             let provider: ISelectionProvider = WindowsProvider {
                 platform: Rc::new(WindowsPlatformState {
@@ -1445,6 +1674,10 @@ mod tests {
                 text_range: None,
             }
             .into();
+
+            let simple = provider.cast::<IRawElementProviderSimple>().unwrap();
+            let pattern = unsafe { simple.GetPatternProvider(UIA_SelectionPatternId) }.unwrap();
+            pattern.cast::<ISelectionProvider>().unwrap();
 
             assert_eq!(
                 unsafe { provider.IsSelectionRequired() }.unwrap(),
@@ -1479,21 +1712,39 @@ mod tests {
 
         let mut first = crate::AccessNode::new();
         first.set_role(Role::RadioButton);
+        first.set_selection_data(Some(crate::SelectionData::SelectionGroupItem(
+            crate::SelectionGroupItem {
+                selection_group: container,
+                is_selected: true,
+            },
+        )));
         let first = tree.insert_node(first, Some(container));
 
         let mut omitted = crate::AccessNode::new();
         omitted.set_role(Role::CheckBox);
+        omitted.set_selection_data(Some(crate::SelectionData::SelectionGroupItem(
+            crate::SelectionGroupItem {
+                selection_group: container,
+                is_selected: false,
+            },
+        )));
         tree.insert_node(omitted, Some(container));
 
         let mut last = crate::AccessNode::new();
         last.set_role(Role::ListItem);
+        last.set_selection_data(Some(crate::SelectionData::SelectionGroupItem(
+            crate::SelectionGroupItem {
+                selection_group: container,
+                is_selected: true,
+            },
+        )));
         let last = tree.insert_node(last, Some(container));
 
-        let mut selection_data = crate::SelectionData::default();
-        selection_data.selected_children.extend([first, last]);
+        let mut selection_group = crate::SelectionGroup::default();
+        selection_group.selected_children.extend([first, last]);
         tree.get_node_mut(container)
             .unwrap()
-            .set_selection_data(Some(selection_data));
+            .set_selection_data(Some(crate::SelectionData::SelectionGroup(selection_group)));
 
         let provider = selection_provider(&tree, container);
         let array = SafeArrayGuard::new(unsafe { provider.GetSelection() }.unwrap());
@@ -1516,10 +1767,7 @@ mod tests {
 
         assert_eq!(
             selected_control_types,
-            [
-                UIA_RadioButtonControlTypeId.0,
-                UIA_ListItemControlTypeId.0
-            ]
+            [UIA_RadioButtonControlTypeId.0, UIA_ListItemControlTypeId.0]
         );
     }
 
@@ -1527,7 +1775,9 @@ mod tests {
     fn selection_provider_returns_an_empty_array_when_nothing_is_selected() {
         let tree = AccessTree::<TestWindow, ()>::new();
         let mut node = crate::AccessNode::new();
-        node.set_selection_data(Some(crate::SelectionData::default()));
+        node.set_selection_data(Some(crate::SelectionData::SelectionGroup(
+            crate::SelectionGroup::default(),
+        )));
         let node = tree.insert_node(node, None);
         let provider = selection_provider(&tree, node);
 
@@ -1537,6 +1787,83 @@ mod tests {
         assert_eq!(unsafe { SafeArrayGetVartype(array.0) }.unwrap(), VT_UNKNOWN);
         assert_eq!(unsafe { SafeArrayGetLBound(array.0, 1) }.unwrap(), 0);
         assert_eq!(unsafe { SafeArrayGetUBound(array.0, 1) }.unwrap(), -1);
+    }
+
+    #[test]
+    fn selection_item_provider_reports_its_selection_data() {
+        for is_selected in [false, true] {
+            let tree = AccessTree::<TestWindow, ()>::new();
+            let select_count = Rc::new(Cell::new(0));
+            let add_to_selection_count = Rc::new(Cell::new(0));
+            let unselect_count = Rc::new(Cell::new(0));
+            let mut selection_group = crate::AccessNode::new();
+            selection_group.set_selection_data(Some(crate::SelectionData::SelectionGroup(
+                crate::SelectionGroup::default(),
+            )));
+            let selection_group = tree.insert_node(selection_group, None);
+            let mut node = crate::AccessNode::new();
+            node.set_role(Role::RadioButton);
+            node.set_checked(!is_selected);
+            node.set_selection_data(Some(crate::SelectionData::SelectionGroupItem(
+                crate::SelectionGroupItem {
+                    selection_group,
+                    is_selected,
+                },
+            )));
+            let node = tree.insert_node(node, Some(selection_group));
+            tree.set_on_access_event({
+                let select_count = select_count.clone();
+                let add_to_selection_count = add_to_selection_count.clone();
+                let unselect_count = unselect_count.clone();
+                move |_, _, event| {
+                    match event {
+                        AccessEvent::Select => select_count.set(select_count.get() + 1),
+                        AccessEvent::AddToSelection => {
+                            add_to_selection_count.set(add_to_selection_count.get() + 1);
+                        }
+                        AccessEvent::UnSelect => {
+                            unselect_count.set(unselect_count.get() + 1);
+                        }
+                        _ => {}
+                    }
+                    Ok(())
+                }
+            });
+            let provider: ISelectionItemProvider = WindowsProvider {
+                platform: Rc::new(WindowsPlatformState {
+                    id: 1,
+                    com_apartment: OnceCell::new(),
+                }),
+                access_tree: tree.downgrade(),
+                node,
+                text_range: None,
+            }
+            .into();
+
+            assert_eq!(
+                unsafe { provider.IsSelected() }.unwrap(),
+                BOOL::from(is_selected)
+            );
+            unsafe { provider.Select() }.unwrap();
+            assert_eq!(select_count.get(), 1);
+            unsafe { provider.AddToSelection() }.unwrap();
+            assert_eq!(add_to_selection_count.get(), 1);
+            unsafe { provider.RemoveFromSelection() }.unwrap();
+            assert_eq!(unselect_count.get(), 1);
+
+            let selection_container = unsafe { provider.SelectionContainer() }.unwrap();
+            let selection_pattern =
+                unsafe { selection_container.GetPatternProvider(UIA_SelectionPatternId) }.unwrap();
+            selection_pattern.cast::<ISelectionProvider>().unwrap();
+
+            let simple = provider.cast::<IRawElementProviderSimple>().unwrap();
+            let pattern = unsafe { simple.GetPatternProvider(UIA_SelectionItemPatternId) }.unwrap();
+            pattern.cast::<ISelectionItemProvider>().unwrap();
+
+            let property =
+                unsafe { simple.GetPropertyValue(UIA_SelectionItemIsSelectedPropertyId) }.unwrap();
+            assert_eq!(bool::try_from(&property).unwrap(), is_selected);
+        }
     }
 
     #[test]

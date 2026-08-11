@@ -190,12 +190,12 @@ impl<T: AccessNodeContext> AccessNode<T> {
         self.context.as_ref()
     }
 
-    /// Sets the selection data used for radio groups, dropdowns, etc.
+    /// Sets whether this node is a selection group or a selection group item.
     pub fn set_selection_data(&mut self, selection_data: Option<SelectionData>) {
         self.selection_data = selection_data;
     }
 
-    /// Gets the selection data.
+    /// Gets this node's selection data.
     pub fn selection_data(&self) -> Option<&SelectionData> {
         self.selection_data.as_ref()
     }
