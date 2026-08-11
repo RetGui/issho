@@ -189,6 +189,16 @@ impl<T: AccessNodeContext> AccessNode<T> {
     pub fn context(&self) -> Option<&T> {
         self.context.as_ref()
     }
+
+    /// Sets the selection data used for radio groups, dropdowns, etc.
+    pub fn set_selection_data(&mut self, selection_data: Option<SelectionData>) {
+        self.selection_data = selection_data;
+    }
+
+    /// Gets the selection data.
+    pub fn selection_data(&self) -> Option<&SelectionData> {
+        self.selection_data.as_ref()
+    }
 }
 
 impl<T: AccessNodeContext> Default for AccessNode<T> {

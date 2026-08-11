@@ -16,13 +16,40 @@ use windows::Win32::System::Com::{
     COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize, SAFEARRAY,
 };
 use windows::Win32::System::Ole::{SafeArrayCreateVector, SafeArrayDestroy, SafeArrayPutElement};
-use windows::Win32::System::Variant::{VARIANT, VT_I4, VT_R8};
-use windows::Win32::UI::Accessibility::{Assertive as UiaAssertive, IRawElementProviderFragment, IRawElementProviderFragment_Impl, IRawElementProviderFragmentRoot, IRawElementProviderFragmentRoot_Impl, IRawElementProviderSimple, IRawElementProviderSimple_Impl, ITextProvider, ITextProvider_Impl, ITextRangeProvider, ITextRangeProvider_Impl, ISelectionProvider, IToggleProvider, IToggleProvider_Impl, NavigateDirection, NavigateDirection_FirstChild, NavigateDirection_LastChild, NavigateDirection_NextSibling, NavigateDirection_Parent, NavigateDirection_PreviousSibling, Off as UiaOff, Polite as UiaPolite, ProviderOptions, ProviderOptions_ServerSideProvider, ProviderOptions_UseComThreading, SupportedTextSelection, SupportedTextSelection_Single, TextPatternRangeEndpoint, TextUnit, TextUnit_Character, ToggleState, ToggleState_Off, ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId, UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId, UIA_E_ELEMENTNOTAVAILABLE, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId, UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId, UIA_ImageControlTypeId, UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId, UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId, UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId, UIA_MenuControlTypeId, UIA_MenuItemControlTypeId, UIA_NamePropertyId, UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId, UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId, UIA_SeparatorControlTypeId, UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID, UIA_TabControlTypeId, UIA_TabItemControlTypeId, UIA_TextControlTypeId, UIA_TextPatternId, UIA_TogglePatternId, UIA_ToggleToggleStatePropertyId, UIA_ToolBarControlTypeId, UIA_TreeControlTypeId, UIA_TreeItemControlTypeId, UIA_ValueValuePropertyId, UIA_WindowControlTypeId, UiaAppendRuntimeId, UiaHostProviderFromHwnd, UiaPoint, UiaRaiseAutomationEvent, UiaRaiseAutomationPropertyChangedEvent, UiaRect, UiaReturnRawElementProvider, UiaRootObjectId, ISelectionProvider_Impl};
+use windows::Win32::System::Variant::{VARIANT, VT_I4, VT_R8, VT_UNKNOWN};
 use windows::Win32::UI::Accessibility::{
-    ISelectionItemProvider, ISelectionItemProvider_Impl, SupportedTextSelection_Multiple,
-    SupportedTextSelection_None, TextUnit_Document, TextUnit_Format, TextUnit_Line, TextUnit_Page,
-    TextUnit_Paragraph, TextUnit_Word, UIA_SelectionItemIsSelectedPropertyId,
-    UIA_SelectionItemPatternId,
+    Assertive as UiaAssertive, IRawElementProviderFragment, IRawElementProviderFragment_Impl,
+    IRawElementProviderFragmentRoot, IRawElementProviderFragmentRoot_Impl,
+    IRawElementProviderSimple, IRawElementProviderSimple_Impl, ISelectionProvider,
+    ISelectionProvider_Impl, ITextProvider, ITextProvider_Impl, ITextRangeProvider,
+    ITextRangeProvider_Impl, IToggleProvider, IToggleProvider_Impl, NavigateDirection,
+    NavigateDirection_FirstChild, NavigateDirection_LastChild, NavigateDirection_NextSibling,
+    NavigateDirection_Parent, NavigateDirection_PreviousSibling, Off as UiaOff,
+    Polite as UiaPolite, ProviderOptions, ProviderOptions_ServerSideProvider,
+    ProviderOptions_UseComThreading, SupportedTextSelection, SupportedTextSelection_Single,
+    TextPatternRangeEndpoint, TextUnit, TextUnit_Character, ToggleState, ToggleState_Off,
+    ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId,
+    UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId,
+    UIA_E_ELEMENTNOTAVAILABLE, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId,
+    UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId,
+    UIA_ImageControlTypeId, UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId,
+    UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId,
+    UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId,
+    UIA_MenuControlTypeId, UIA_MenuItemControlTypeId, UIA_NamePropertyId,
+    UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId,
+    UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId,
+    UIA_SeparatorControlTypeId, UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID,
+    UIA_TabControlTypeId, UIA_TabItemControlTypeId, UIA_TextControlTypeId, UIA_TextPatternId,
+    UIA_TogglePatternId, UIA_ToggleToggleStatePropertyId, UIA_ToolBarControlTypeId,
+    UIA_TreeControlTypeId, UIA_TreeItemControlTypeId, UIA_ValueValuePropertyId,
+    UIA_WindowControlTypeId, UiaAppendRuntimeId, UiaHostProviderFromHwnd, UiaPoint,
+    UiaRaiseAutomationEvent, UiaRaiseAutomationPropertyChangedEvent, UiaRect,
+    UiaReturnRawElementProvider, UiaRootObjectId,
+};
+use windows::Win32::UI::Accessibility::{
+    SupportedTextSelection_Multiple, SupportedTextSelection_None, TextUnit_Document,
+    TextUnit_Format, TextUnit_Line, TextUnit_Page, TextUnit_Paragraph, TextUnit_Word,
+    UIA_E_NOTSUPPORTED, UIA_SelectionItemIsSelectedPropertyId,
 };
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, WM_GETOBJECT, WM_NCDESTROY};
@@ -314,7 +341,7 @@ impl Default for WindowsPlatform {
     IToggleProvider,
     ITextProvider,
     ITextRangeProvider,
-    ISelectionProvider,
+    ISelectionProvider
 )]
 struct WindowsProvider<T, U>
 where
@@ -1167,7 +1194,51 @@ where
     #[allow(non_snake_case)]
     fn GetSelection(&self) -> windows_core::Result<*mut SAFEARRAY> {
         // A default empty array is returned by UIAutoCore.dll when the provider doesn't supply a value.
-        todo!()
+        let access_tree = self.access_tree()?;
+        let node = access_tree
+            .get_node(self.node)
+            .ok_or_else(element_not_available)?;
+        let selection_data = node.selection_data().ok_or_else(|| {
+            windows_core::Error::from_hresult(windows_core::HRESULT(UIA_E_NOTSUPPORTED as i32))
+        })?;
+
+        if selection_data
+            .selected_children
+            .iter()
+            .any(|child| !access_tree.contains_node(*child))
+        {
+            return Err(element_not_available());
+        }
+
+        let child_count = i32::try_from(selection_data.selected_children.len())
+            .map_err(|_| windows_core::Error::from_hresult(E_OUTOFMEMORY))?;
+        let array = unsafe { SafeArrayCreateVector(VT_UNKNOWN, 0, child_count as u32) };
+        if array.is_null() {
+            return Err(windows_core::Error::from_hresult(E_OUTOFMEMORY));
+        }
+
+        for (index, child) in selection_data.selected_children.iter().enumerate() {
+            let provider: IRawElementProviderSimple = WindowsProvider {
+                platform: self.platform.clone(),
+                access_tree: self.access_tree.clone(),
+                node: *child,
+                text_range: None,
+            }
+            .into();
+            let index = index as i32;
+
+            // SAFETY: `array` is a VT_UNKNOWN SAFEARRAY with `child_count` elements,
+            // `index` is in bounds, and `provider` is a valid COM interface pointer.
+            // VT_UNKNOWN elements take the interface pointer directly and AddRef it.
+            if let Err(error) =
+                unsafe { SafeArrayPutElement(array, &index, provider.as_raw()) }
+            {
+                let _ = unsafe { SafeArrayDestroy(array) };
+                return Err(error);
+            }
+        }
+
+        Ok(array)
     }
 
     /// Gets a value that specifies whether the UI Automation provider allows more than one child element to be selected concurrently.
@@ -1175,7 +1246,15 @@ where
     fn CanSelectMultiple(&self) -> windows_core::Result<BOOL> {
         // This property may be dynamic. For example, in rare cases a control might allow multiple items to
         // be selected on initialization but subsequently allow only single selections to be made.
-        todo!()
+        let access_tree = self.access_tree()?;
+        let node = access_tree
+            .get_node(self.node)
+            .ok_or_else(element_not_available)?;
+        let selection_data = node.selection_data().ok_or_else(|| {
+            windows_core::Error::from_hresult(windows_core::HRESULT(UIA_E_NOTSUPPORTED as i32))
+        })?;
+
+        Ok(selection_data.multiple_selectable.into())
     }
 
     /// Gets a value that specifies whether the UI Automation provider requires at least one child element to be selected.
@@ -1184,7 +1263,15 @@ where
         // This property can be dynamic. For example, the initial state of a control might not have any
         // items selected by default, meaning that IsSelectionRequired is false. However, after an item
         // is selected, the control must always have at least one item selected.
-        todo!()
+        let access_tree = self.access_tree()?;
+        let node = access_tree
+            .get_node(self.node)
+            .ok_or_else(element_not_available)?;
+        let selection_data = node.selection_data().ok_or_else(|| {
+            windows_core::Error::from_hresult(windows_core::HRESULT(UIA_E_NOTSUPPORTED as i32))
+        })?;
+
+        Ok(selection_data.is_mandatory.into())
     }
 }
 
@@ -1196,11 +1283,55 @@ mod tests {
 
     use raw_window_handle::{HandleError, HasWindowHandle, WindowHandle};
     use windows::Win32::System::Com::COINIT_MULTITHREADED;
+    use windows::Win32::System::Ole::{
+        SafeArrayGetDim, SafeArrayGetElement, SafeArrayGetLBound, SafeArrayGetUBound,
+        SafeArrayGetVartype,
+    };
 
     use super::*;
 
     #[derive(Clone)]
     struct TestWindow;
+
+    struct SafeArrayGuard(*mut SAFEARRAY);
+
+    impl SafeArrayGuard {
+        fn new(array: *mut SAFEARRAY) -> Self {
+            assert!(!array.is_null());
+            Self(array)
+        }
+    }
+
+    impl Drop for SafeArrayGuard {
+        fn drop(&mut self) {
+            let _ = unsafe { SafeArrayDestroy(self.0) };
+        }
+    }
+
+    fn safe_array_unknown(array: *mut SAFEARRAY, index: i32) -> IUnknown {
+        let mut raw: *mut core::ffi::c_void = ptr::null_mut();
+        unsafe { SafeArrayGetElement(array, &index, ptr::from_mut(&mut raw).cast()) }.unwrap();
+        assert!(!raw.is_null());
+
+        // SAFETY: SafeArrayGetElement returned an owned reference for this VT_UNKNOWN element.
+        unsafe { IUnknown::from_raw(raw) }
+    }
+
+    fn selection_provider(
+        tree: &AccessTree<TestWindow, ()>,
+        node: AccessKey,
+    ) -> ISelectionProvider {
+        WindowsProvider {
+            platform: Rc::new(WindowsPlatformState {
+                id: 1,
+                com_apartment: OnceCell::new(),
+            }),
+            access_tree: tree.downgrade(),
+            node,
+            text_range: None,
+        }
+        .into()
+    }
 
     impl HasWindowHandle for TestWindow {
         fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
@@ -1292,6 +1423,120 @@ mod tests {
         assert_eq!(unsafe { toggle.ToggleState() }.unwrap(), ToggleState_On);
         unsafe { toggle.Toggle() }.unwrap();
         assert_eq!(toggle_count.get(), 1);
+    }
+
+    #[test]
+    fn selection_provider_reports_whether_selection_is_required() {
+        for is_mandatory in [false, true] {
+            let tree = AccessTree::<TestWindow, ()>::new();
+            let mut node = crate::AccessNode::new();
+            node.set_selection_data(Some(crate::SelectionData {
+                is_mandatory,
+                ..Default::default()
+            }));
+            let node = tree.insert_node(node, None);
+            let provider: ISelectionProvider = WindowsProvider {
+                platform: Rc::new(WindowsPlatformState {
+                    id: 1,
+                    com_apartment: OnceCell::new(),
+                }),
+                access_tree: tree.downgrade(),
+                node,
+                text_range: None,
+            }
+            .into();
+
+            assert_eq!(
+                unsafe { provider.IsSelectionRequired() }.unwrap(),
+                BOOL::from(is_mandatory)
+            );
+        }
+
+        let tree = AccessTree::<TestWindow, ()>::new();
+        let node = tree.insert_node(crate::AccessNode::new(), None);
+        let provider: ISelectionProvider = WindowsProvider {
+            platform: Rc::new(WindowsPlatformState {
+                id: 1,
+                com_apartment: OnceCell::new(),
+            }),
+            access_tree: tree.downgrade(),
+            node,
+            text_range: None,
+        }
+        .into();
+
+        let error = unsafe { provider.IsSelectionRequired() }.unwrap_err();
+        assert_eq!(
+            error.code(),
+            windows_core::HRESULT(UIA_E_NOTSUPPORTED as i32)
+        );
+    }
+
+    #[test]
+    fn selection_provider_returns_selected_children() {
+        let tree = AccessTree::<TestWindow, ()>::new();
+        let container = tree.insert_node(crate::AccessNode::new(), None);
+
+        let mut first = crate::AccessNode::new();
+        first.set_role(Role::RadioButton);
+        let first = tree.insert_node(first, Some(container));
+
+        let mut omitted = crate::AccessNode::new();
+        omitted.set_role(Role::CheckBox);
+        tree.insert_node(omitted, Some(container));
+
+        let mut last = crate::AccessNode::new();
+        last.set_role(Role::ListItem);
+        let last = tree.insert_node(last, Some(container));
+
+        let mut selection_data = crate::SelectionData::default();
+        selection_data.selected_children.extend([first, last]);
+        tree.get_node_mut(container)
+            .unwrap()
+            .set_selection_data(Some(selection_data));
+
+        let provider = selection_provider(&tree, container);
+        let array = SafeArrayGuard::new(unsafe { provider.GetSelection() }.unwrap());
+
+        assert_eq!(unsafe { SafeArrayGetDim(array.0) }, 1);
+        assert_eq!(unsafe { SafeArrayGetVartype(array.0) }.unwrap(), VT_UNKNOWN);
+        assert_eq!(unsafe { SafeArrayGetLBound(array.0, 1) }.unwrap(), 0);
+        assert_eq!(unsafe { SafeArrayGetUBound(array.0, 1) }.unwrap(), 1);
+
+        let selected_control_types: std::vec::Vec<i32> = (0..2)
+            .map(|index| {
+                let selected = safe_array_unknown(array.0, index)
+                    .cast::<IRawElementProviderSimple>()
+                    .unwrap();
+                let control_type =
+                    unsafe { selected.GetPropertyValue(UIA_ControlTypePropertyId) }.unwrap();
+                i32::try_from(&control_type).unwrap()
+            })
+            .collect();
+
+        assert_eq!(
+            selected_control_types,
+            [
+                UIA_RadioButtonControlTypeId.0,
+                UIA_ListItemControlTypeId.0
+            ]
+        );
+    }
+
+    #[test]
+    fn selection_provider_returns_an_empty_array_when_nothing_is_selected() {
+        let tree = AccessTree::<TestWindow, ()>::new();
+        let mut node = crate::AccessNode::new();
+        node.set_selection_data(Some(crate::SelectionData::default()));
+        let node = tree.insert_node(node, None);
+        let provider = selection_provider(&tree, node);
+
+        let array = SafeArrayGuard::new(unsafe { provider.GetSelection() }.unwrap());
+
+        assert_eq!(unsafe { SafeArrayGetDim(array.0) }, 1);
+        assert_eq!(unsafe { SafeArrayGetVartype(array.0) }.unwrap(), VT_UNKNOWN);
+        assert_eq!(unsafe { SafeArrayGetLBound(array.0, 1) }.unwrap(), 0);
+        assert_eq!(unsafe { SafeArrayGetUBound(array.0, 1) }.unwrap(), -1);
     }
 
     #[test]
