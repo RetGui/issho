@@ -19,27 +19,29 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::Ole::{SafeArrayCreateVector, SafeArrayDestroy, SafeArrayPutElement};
 use windows::Win32::System::Variant::{VARIANT, VT_I4, VT_R8, VT_UNKNOWN};
 use windows::Win32::UI::Accessibility::{
-    Assertive as UiaAssertive, IRawElementProviderFragment, IRawElementProviderFragment_Impl,
-    IRawElementProviderFragmentRoot, IRawElementProviderFragmentRoot_Impl,
-    IRawElementProviderSimple, IRawElementProviderSimple_Impl, ISelectionItemProvider,
-    ISelectionItemProvider_Impl, ISelectionProvider, ISelectionProvider_Impl, ITextProvider,
-    ITextProvider_Impl, ITextRangeProvider, ITextRangeProvider_Impl, IToggleProvider,
-    IToggleProvider_Impl, NavigateDirection, NavigateDirection_FirstChild,
-    NavigateDirection_LastChild, NavigateDirection_NextSibling, NavigateDirection_Parent,
-    NavigateDirection_PreviousSibling, Off as UiaOff, Polite as UiaPolite, ProviderOptions,
-    ProviderOptions_ServerSideProvider, ProviderOptions_UseComThreading, SupportedTextSelection,
-    SupportedTextSelection_Single, TextPatternRangeEndpoint, TextUnit, TextUnit_Character,
-    ToggleState, ToggleState_Off, ToggleState_On, UIA_AutomationFocusChangedEventId,
-    UIA_ButtonControlTypeId, UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId,
-    UIA_ControlTypePropertyId, UIA_E_ELEMENTNOTAVAILABLE, UIA_EVENT_ID, UIA_EditControlTypeId,
-    UIA_FrameworkIdPropertyId, UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId,
-    UIA_HyperlinkControlTypeId, UIA_ImageControlTypeId, UIA_IsContentElementPropertyId,
-    UIA_IsControlElementPropertyId, UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId,
-    UIA_ListControlTypeId, UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId,
-    UIA_LiveSettingPropertyId, UIA_MenuControlTypeId, UIA_MenuItemControlTypeId,
-    UIA_NamePropertyId, UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID,
-    UIA_PaneControlTypeId, UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId,
-    UIA_ScrollBarControlTypeId, UIA_SelectionItem_ElementAddedToSelectionEventId,
+    Assertive as UiaAssertive, IInvokeProvider, IInvokeProvider_Impl, IRawElementProviderFragment,
+    IRawElementProviderFragment_Impl, IRawElementProviderFragmentRoot,
+    IRawElementProviderFragmentRoot_Impl, IRawElementProviderSimple,
+    IRawElementProviderSimple_Impl, ISelectionItemProvider, ISelectionItemProvider_Impl,
+    ISelectionProvider, ISelectionProvider_Impl, ITextProvider, ITextProvider_Impl,
+    ITextRangeProvider, ITextRangeProvider_Impl, IToggleProvider, IToggleProvider_Impl,
+    NavigateDirection, NavigateDirection_FirstChild, NavigateDirection_LastChild,
+    NavigateDirection_NextSibling, NavigateDirection_Parent, NavigateDirection_PreviousSibling,
+    Off as UiaOff, Polite as UiaPolite, ProviderOptions, ProviderOptions_ServerSideProvider,
+    ProviderOptions_UseComThreading, SupportedTextSelection, SupportedTextSelection_Single,
+    TextPatternRangeEndpoint, TextUnit, TextUnit_Character, ToggleState, ToggleState_Off,
+    ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId,
+    UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId,
+    UIA_E_ELEMENTNOTAVAILABLE, UIA_EVENT_ID, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId,
+    UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId,
+    UIA_ImageControlTypeId, UIA_Invoke_InvokedEventId, UIA_InvokePatternId,
+    UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId, UIA_IsEnabledPropertyId,
+    UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId, UIA_ListItemControlTypeId,
+    UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId, UIA_MenuControlTypeId,
+    UIA_MenuItemControlTypeId, UIA_NamePropertyId, UIA_NativeWindowHandlePropertyId,
+    UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId, UIA_ProgressBarControlTypeId,
+    UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId,
+    UIA_SelectionItem_ElementAddedToSelectionEventId,
     UIA_SelectionItem_ElementRemovedFromSelectionEventId, UIA_SelectionItem_ElementSelectedEventId,
     UIA_SelectionItemPatternId, UIA_SelectionPatternId, UIA_SeparatorControlTypeId,
     UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID, UIA_TabControlTypeId, UIA_TabItemControlTypeId,
@@ -457,7 +459,8 @@ impl Default for WindowsPlatform {
     ITextProvider,
     ITextRangeProvider,
     ISelectionProvider,
-    ISelectionItemProvider
+    ISelectionItemProvider,
+    IInvokeProvider
 )]
 struct WindowsProvider<T, U>
 where
@@ -631,6 +634,11 @@ where
 
         if pattern_id == UIA_TogglePatternId && node.role() == Role::CheckBox {
             let provider: IToggleProvider = self.to_interface();
+            return provider.cast();
+        }
+
+        if pattern_id == UIA_InvokePatternId && node.role() == Role::Button {
+            let provider: IInvokeProvider = self.to_interface();
             return provider.cast();
         }
 
@@ -1485,6 +1493,32 @@ where
     }
 }
 
+// Provides access to controls that initiate or perform a single, unambiguous action and do not maintain state when activated.
+impl<T, U> IInvokeProvider_Impl for WindowsProvider_Impl<T, U>
+where
+    T: AccessWindow,
+    U: AccessNodeContext,
+{
+    /// Sends a request to activate a control and initiate its single, unambiguous action.
+    #[allow(non_snake_case)]
+    fn Invoke(&self) -> windows_core::Result<()> {
+        // IInvokeProvider::Invoke is an asynchronous call and must return immediately without blocking.
+        // Note: This is particularly critical for controls that, directly or indirectly, launch a modal dialog when invoked. Any Microsoft UI Automation client that instigated the event will remain blocked until the modal dialog is closed.
+        // IInvokeProvider::Invoke raises the Invoked event after the control has completed its associated action, if possible.
+        // The event should be raised before servicing the Invoke request in the following scenarios:
+        //   * It is not possible or practical to wait until the action is complete.
+        //   * The action requires user interaction.
+        //   * The action is time-consuming and will cause the calling client to block for a significant length of time.
+        let access_tree = self.access_tree()?;
+        access_tree
+            .dispatch_access_event(self.node, AccessEvent::Invoke)
+            .map_err(|_| element_not_available())?;
+
+        let provider: IRawElementProviderSimple = self.to_interface();
+        unsafe { UiaRaiseAutomationEvent(&provider, UIA_Invoke_InvokedEventId) }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     extern crate std;
@@ -1700,6 +1734,40 @@ mod tests {
         assert_eq!(unsafe { toggle.ToggleState() }.unwrap(), ToggleState_On);
         unsafe { toggle.Toggle() }.unwrap();
         assert_eq!(toggle_count.get(), 1);
+    }
+
+    #[test]
+    fn button_exposes_the_invoke_pattern_and_dispatches_invoke_event() {
+        let tree = AccessTree::<TestWindow, ()>::new();
+        let invoke_count = Rc::new(Cell::new(0));
+        let mut node = crate::AccessNode::new();
+        node.set_role(Role::Button);
+        let node = tree.insert_node(node, None);
+        tree.set_on_access_event({
+            let invoke_count = invoke_count.clone();
+            move |_, _, event| {
+                if matches!(event, AccessEvent::Invoke) {
+                    invoke_count.set(invoke_count.get() + 1);
+                }
+                Ok(())
+            }
+        });
+        let provider: IRawElementProviderSimple = WindowsProvider {
+            platform: Rc::new(WindowsPlatformState {
+                id: 1,
+                com_apartment: OnceCell::new(),
+            }),
+            access_tree: tree.downgrade(),
+            node,
+            text_range: None,
+        }
+        .into();
+
+        let pattern = unsafe { provider.GetPatternProvider(UIA_InvokePatternId) }.unwrap();
+        let invoke = pattern.cast::<IInvokeProvider>().unwrap();
+
+        unsafe { invoke.Invoke() }.unwrap();
+        assert_eq!(invoke_count.get(), 1);
     }
 
     #[test]

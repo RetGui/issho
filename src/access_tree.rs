@@ -712,7 +712,7 @@ impl<T: AccessWindow, U: AccessNodeContext> AccessTreeInternal<T, U> {
     }
 
     fn get_root_window(&self, root: AccessKey) -> Option<&T> {
-        let root_window = self.roots.get(&root).expect("root not found");
+        let root_window = self.roots.get(&root)?;
         root_window.as_ref()
     }
 
