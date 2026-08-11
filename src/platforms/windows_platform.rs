@@ -174,18 +174,86 @@ fn selection_not_supported() -> windows_core::Error {
     windows_core::Error::from_hresult(windows_core::HRESULT(UIA_E_NOTSUPPORTED as i32))
 }
 
-fn selection_group_children<T: AccessWindow, U: AccessNodeContext>(
+fn find_selection_group<T: AccessWindow, U: AccessNodeContext>(
+    access_tree: &AccessTree<T, U>,
+    selection_item: AccessKey,
+) -> windows_core::Result<AccessKey> {
+    let node = access_tree
+        .get_node(selection_item)
+        .ok_or_else(element_not_available)?;
+    if !matches!(
+        node.selection_data(),
+        Some(SelectionData::SelectionGroupItem(_))
+    ) {
+        return Err(selection_not_supported());
+    }
+    drop(node);
+
+    let mut ancestor = access_tree.get_parent(selection_item);
+    while let Some(candidate) = ancestor {
+        let node = access_tree
+            .get_node(candidate)
+            .ok_or_else(element_not_available)?;
+        if matches!(
+            node.selection_data(),
+            Some(SelectionData::SelectionGroup(_))
+        ) {
+            return Ok(candidate);
+        }
+        drop(node);
+        ancestor = access_tree.get_parent(candidate);
+    }
+
+    Err(selection_not_supported())
+}
+
+fn selected_items_in_group<T: AccessWindow, U: AccessNodeContext>(
     access_tree: &AccessTree<T, U>,
     selection_group: AccessKey,
 ) -> windows_core::Result<SmallVec<[AccessKey; 4]>> {
     let node = access_tree
         .get_node(selection_group)
         .ok_or_else(element_not_available)?;
-    let Some(SelectionData::SelectionGroup(selection_group)) = node.selection_data() else {
+    if !matches!(
+        node.selection_data(),
+        Some(SelectionData::SelectionGroup(_))
+    ) {
         return Err(selection_not_supported());
-    };
+    }
+    drop(node);
 
-    Ok(selection_group.selected_children.clone())
+    let mut selected_items = SmallVec::new();
+    let mut pending = SmallVec::<[AccessKey; 16]>::new();
+    if let Some(first_child) = access_tree.get_first_child(selection_group) {
+        pending.push(first_child);
+    }
+
+    while let Some(candidate) = pending.pop() {
+        if let Some(next_sibling) = access_tree.get_next_sibling(candidate) {
+            pending.push(next_sibling);
+        }
+
+        let node = access_tree
+            .get_node(candidate)
+            .ok_or_else(element_not_available)?;
+        let is_nested_group = matches!(
+            node.selection_data(),
+            Some(SelectionData::SelectionGroup(_))
+        );
+        if matches!(
+            node.selection_data(),
+            Some(SelectionData::SelectionGroupItem(item)) if item.is_selected
+        ) {
+            selected_items.push(candidate);
+        }
+        drop(node);
+
+        if !is_nested_group && let Some(first_child) = access_tree.get_first_child(candidate) {
+            pending.push(first_child);
+        }
+    }
+
+    Ok(selected_items)
 }
 
 fn raise_selection_item_events(
@@ -409,24 +477,14 @@ impl<T: AccessWindow, U: AccessNodeContext> WindowsProvider<T, U> {
 
     fn dispatch_selection_action(&self, event: AccessEvent) -> windows_core::Result<()> {
         let access_tree = self.access_tree()?;
-        let selection_group = {
-            let node = access_tree
-                .get_node(self.node)
-                .ok_or_else(element_not_available)?;
-            let Some(SelectionData::SelectionGroupItem(selection_group_item)) =
-                node.selection_data()
-            else {
-                return Err(selection_not_supported());
-            };
-            selection_group_item.selection_group
-        };
-        let previous_selection = selection_group_children(&access_tree, selection_group)?;
+        let selection_group = find_selection_group(&access_tree, self.node)?;
+        let previous_selection = selected_items_in_group(&access_tree, selection_group)?;
 
         access_tree
             .dispatch_access_event(self.node, event)
             .map_err(|_| element_not_available())?;
 
-        let current_selection = selection_group_children(&access_tree, selection_group)?;
+        let current_selection = selected_items_in_group(&access_tree, selection_group)?;
         raise_selection_item_events(&previous_selection, &current_selection, |node, event_id| {
             if !access_tree.contains_node(node) {
                 return Err(element_not_available());
@@ -1295,29 +1353,16 @@ where
     fn GetSelection(&self) -> windows_core::Result<*mut SAFEARRAY> {
         // A default empty array is returned by UIAutoCore.dll when the provider doesn't supply a value.
         let access_tree = self.access_tree()?;
-        let node = access_tree
-            .get_node(self.node)
-            .ok_or_else(element_not_available)?;
-        let Some(SelectionData::SelectionGroup(selection_group)) = node.selection_data() else {
-            return Err(selection_not_supported());
-        };
+        let selected_items = selected_items_in_group(&access_tree, self.node)?;
 
-        if selection_group
-            .selected_children
-            .iter()
-            .any(|child| !access_tree.contains_node(*child))
-        {
-            return Err(element_not_available());
-        }
-
-        let child_count = i32::try_from(selection_group.selected_children.len())
+        let child_count = i32::try_from(selected_items.len())
             .map_err(|_| windows_core::Error::from_hresult(E_OUTOFMEMORY))?;
         let array = unsafe { SafeArrayCreateVector(VT_UNKNOWN, 0, child_count as u32) };
         if array.is_null() {
             return Err(windows_core::Error::from_hresult(E_OUTOFMEMORY));
         }
 
-        for (index, child) in selection_group.selected_children.iter().enumerate() {
+        for (index, child) in selected_items.iter().enumerate() {
             let provider: IRawElementProviderSimple = WindowsProvider {
                 platform: self.platform.clone(),
                 access_tree: self.access_tree.clone(),
@@ -1428,27 +1473,7 @@ where
     #[allow(non_snake_case)]
     fn SelectionContainer(&self) -> windows_core::Result<IRawElementProviderSimple> {
         let access_tree = self.access_tree()?;
-        let selection_group = {
-            let node = access_tree
-                .get_node(self.node)
-                .ok_or_else(element_not_available)?;
-            let Some(SelectionData::SelectionGroupItem(selection_group_item)) =
-                node.selection_data()
-            else {
-                return Err(selection_not_supported());
-            };
-            selection_group_item.selection_group
-        };
-
-        let selection_group_node = access_tree
-            .get_node(selection_group)
-            .ok_or_else(element_not_available)?;
-        if !matches!(
-            selection_group_node.selection_data(),
-            Some(SelectionData::SelectionGroup(_))
-        ) {
-            return Err(selection_not_supported());
-        }
+        let selection_group = find_selection_group(&access_tree, self.node)?;
 
         Ok(WindowsProvider {
             platform: self.platform.clone(),
@@ -1590,6 +1615,31 @@ mod tests {
     }
 
     #[test]
+    fn selection_group_lookup_uses_the_nearest_ancestor() {
+        let tree = AccessTree::<TestWindow, ()>::new();
+        let mut outer = crate::AccessNode::new();
+        outer.set_selection_data(Some(crate::SelectionData::SelectionGroup(
+            crate::SelectionGroup::default(),
+        )));
+        let outer = tree.insert_node(outer, None);
+
+        let mut inner = crate::AccessNode::new();
+        inner.set_selection_data(Some(crate::SelectionData::SelectionGroup(
+            crate::SelectionGroup::default(),
+        )));
+        let inner = tree.insert_node(inner, Some(outer));
+        let wrapper = tree.insert_node(crate::AccessNode::new(), Some(inner));
+
+        let mut item = crate::AccessNode::new();
+        item.set_selection_data(Some(crate::SelectionData::SelectionGroupItem(
+            crate::SelectionGroupItem::default(),
+        )));
+        let item = tree.insert_node(item, Some(wrapper));
+
+        assert_eq!(find_selection_group(&tree, item).unwrap(), inner);
+    }
+
+    #[test]
     fn com_initialization_is_balanced_and_idempotent() {
         std::thread::spawn(|| {
             unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
@@ -1708,43 +1758,45 @@ mod tests {
     #[test]
     fn selection_provider_returns_selected_children() {
         let tree = AccessTree::<TestWindow, ()>::new();
-        let container = tree.insert_node(crate::AccessNode::new(), None);
+        let mut container = crate::AccessNode::new();
+        container.set_selection_data(Some(crate::SelectionData::SelectionGroup(
+            crate::SelectionGroup::default(),
+        )));
+        let container = tree.insert_node(container, None);
 
         let mut first = crate::AccessNode::new();
         first.set_role(Role::RadioButton);
         first.set_selection_data(Some(crate::SelectionData::SelectionGroupItem(
-            crate::SelectionGroupItem {
-                selection_group: container,
-                is_selected: true,
-            },
+            crate::SelectionGroupItem { is_selected: true },
         )));
-        let first = tree.insert_node(first, Some(container));
+        tree.insert_node(first, Some(container));
 
         let mut omitted = crate::AccessNode::new();
         omitted.set_role(Role::CheckBox);
         omitted.set_selection_data(Some(crate::SelectionData::SelectionGroupItem(
-            crate::SelectionGroupItem {
-                selection_group: container,
-                is_selected: false,
-            },
+            crate::SelectionGroupItem::default(),
         )));
         tree.insert_node(omitted, Some(container));
 
+        let wrapper = tree.insert_node(crate::AccessNode::new(), Some(container));
         let mut last = crate::AccessNode::new();
         last.set_role(Role::ListItem);
         last.set_selection_data(Some(crate::SelectionData::SelectionGroupItem(
-            crate::SelectionGroupItem {
-                selection_group: container,
-                is_selected: true,
-            },
+            crate::SelectionGroupItem { is_selected: true },
         )));
-        let last = tree.insert_node(last, Some(container));
+        tree.insert_node(last, Some(wrapper));
 
-        let mut selection_group = crate::SelectionGroup::default();
-        selection_group.selected_children.extend([first, last]);
-        tree.get_node_mut(container)
-            .unwrap()
-            .set_selection_data(Some(crate::SelectionData::SelectionGroup(selection_group)));
+        let mut nested_group = crate::AccessNode::new();
+        nested_group.set_selection_data(Some(crate::SelectionData::SelectionGroup(
+            crate::SelectionGroup::default(),
+        )));
+        let nested_group = tree.insert_node(nested_group, Some(container));
+        let mut nested_item = crate::AccessNode::new();
+        nested_item.set_role(Role::Button);
+        nested_item.set_selection_data(Some(crate::SelectionData::SelectionGroupItem(
+            crate::SelectionGroupItem { is_selected: true },
+        )));
+        tree.insert_node(nested_item, Some(nested_group));
 
         let provider = selection_provider(&tree, container);
         let array = SafeArrayGuard::new(unsafe { provider.GetSelection() }.unwrap());
@@ -1805,12 +1857,10 @@ mod tests {
             node.set_role(Role::RadioButton);
             node.set_checked(!is_selected);
             node.set_selection_data(Some(crate::SelectionData::SelectionGroupItem(
-                crate::SelectionGroupItem {
-                    selection_group,
-                    is_selected,
-                },
+                crate::SelectionGroupItem { is_selected },
             )));
-            let node = tree.insert_node(node, Some(selection_group));
+            let wrapper = tree.insert_node(crate::AccessNode::new(), Some(selection_group));
+            let node = tree.insert_node(node, Some(wrapper));
             tree.set_on_access_event({
                 let select_count = select_count.clone();
                 let add_to_selection_count = add_to_selection_count.clone();
