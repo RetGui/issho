@@ -3,9 +3,8 @@ use alloc::string::String;
 
 use core::sync::atomic::{AtomicU64, Ordering};
 
+use smallvec::SmallVec;
 use smol_str::SmolStr;
-
-use smolvec::SmolVec;
 
 use crate::access_rect::AccessRect;
 use crate::access_window::AccessNodeContext;
@@ -25,7 +24,7 @@ fn next_id() -> u64 {
 /// A node in an accessibility tree.
 pub struct AccessNode<T: AccessNodeContext> {
     pub(crate) parent: Option<AccessKey>,
-    pub(crate) children: SmolVec<AccessKey>,
+    pub(crate) children: SmallVec<[AccessKey; 4]>,
     /// A globally unique id for this node.
     pub(crate) id: u64,
     bounding_rect: AccessRect,
@@ -47,7 +46,7 @@ impl<T: AccessNodeContext> Clone for AccessNode<T> {
     fn clone(&self) -> Self {
         Self {
             parent: None,
-            children: SmolVec::new(),
+            children: SmallVec::new(),
             id: next_id(),
             bounding_rect: self.bounding_rect,
             checked: self.checked,
@@ -69,7 +68,7 @@ impl<T: AccessNodeContext> AccessNode<T> {
     pub fn new() -> Self {
         Self {
             parent: None,
-            children: SmolVec::new(),
+            children: SmallVec::new(),
             id: next_id(),
             bounding_rect: AccessRect::default(),
             checked: false,
