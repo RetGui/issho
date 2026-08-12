@@ -1,7 +1,8 @@
-use std::{error::Error, io, num::NonZeroU32, rc::Rc};
+use std::{cell::Cell, error::Error, io, num::NonZeroU32, rc::Rc};
 
 use issho::{
-    AccessKey, AccessNode, AccessRect, AccessTree, LiveSetting, Role, SupportedTextSelection,
+    AccessEvent, AccessKey, AccessNode, AccessRect, AccessTree, LiveSetting, Role,
+    SupportedTextSelection,
 };
 use softbuffer::{Context, Surface};
 use vello_cpu::{Pixmap, RenderContext, Resources, color::palette::css, kurbo::Rect};
@@ -124,16 +125,19 @@ impl VelloRenderer {
     }
 }
 
-#[derive(Clone)]
-struct CounterNodeContext;
+#[derive(Clone, Copy)]
+enum CounterElementId {
+    DecrementButton,
+    IncrementButton,
+}
 
 struct App {
     window: Option<Rc<Window>>,
     renderer: Option<VelloRenderer>,
-    access_tree: AccessTree<Rc<Window>, CounterNodeContext>,
+    access_tree: AccessTree<Rc<Window>, CounterElementId>,
     nodes: Option<CounterNodes>,
     cursor_position: PhysicalPosition<f64>,
-    count: i32,
+    count: Rc<Cell<i32>>,
 }
 
 impl ApplicationHandler for App {
@@ -161,6 +165,7 @@ impl ApplicationHandler for App {
         let mut decrement = AccessNode::new();
         decrement.set_role(Role::Button);
         decrement.set_name("Decrement");
+        decrement.set_context(CounterElementId::DecrementButton);
         let decrement = self.access_tree.insert_node(decrement, Some(root));
 
         let mut value = AccessNode::new();
@@ -173,6 +178,7 @@ impl ApplicationHandler for App {
         let mut increment = AccessNode::new();
         increment.set_role(Role::Button);
         increment.set_name("Increment");
+        increment.set_context(CounterElementId::IncrementButton);
         let increment = self.access_tree.insert_node(increment, Some(root));
         let nodes = CounterNodes {
             root,
@@ -180,6 +186,23 @@ impl ApplicationHandler for App {
             value,
             increment,
         };
+        self.access_tree.set_on_access_event({
+            let count = self.count.clone();
+            let window = window.clone();
+            move |access_tree, node, event| {
+                let element_id = access_tree
+                    .get_node(node)
+                    .and_then(|node| node.context().copied());
+                let amount = match (event, element_id) {
+                    (AccessEvent::Invoke, Some(CounterElementId::DecrementButton)) => -1,
+                    (AccessEvent::Invoke, Some(CounterElementId::IncrementButton)) => 1,
+                    _ => return Ok(()),
+                };
+
+                apply_count_change(&count, access_tree, nodes, &window, amount);
+                Ok(())
+            }
+        });
 
         self.renderer = Some(
             VelloRenderer::new(window.clone()).expect("failed to create the CPU rendering surface"),
@@ -268,26 +291,15 @@ impl App {
             access_tree,
             nodes: None,
             cursor_position: PhysicalPosition::new(0.0, 0.0),
-            count: 0,
+            count: Rc::new(Cell::new(0)),
         }
     }
 
     fn change_count(&mut self, amount: i32) {
-        self.count = self.count.saturating_add(amount);
-
-        if let Some(nodes) = self.nodes {
-            let focused_node = if amount < 0 {
-                nodes.decrement
-            } else {
-                nodes.increment
-            };
-            self.access_tree.set_focus(nodes.root, Some(focused_node));
-            self.access_tree
-                .set_name(nodes.value, self.count.to_string());
-        }
-
-        self.update_title();
-        self.request_redraw();
+        let (Some(window), Some(nodes)) = (&self.window, self.nodes) else {
+            return;
+        };
+        apply_count_change(&self.count, &self.access_tree, nodes, window, amount);
     }
 
     fn activate_focused(&mut self) {
@@ -329,7 +341,7 @@ impl App {
             return Ok(());
         };
 
-        renderer.draw(&window, self.count)
+        renderer.draw(&window, self.count.get())
     }
 
     fn request_redraw(&self) {
@@ -340,10 +352,7 @@ impl App {
 
     fn update_title(&self) {
         if let Some(window) = &self.window {
-            window.set_title(&format!(
-                "Counter: {}  |  Down/left click: -  Up/right click: +",
-                self.count
-            ));
+            update_window_title(window, self.count.get());
         }
     }
 
@@ -371,6 +380,34 @@ impl App {
             .expect("increment node not found")
             .set_bounding_rect(layout.increment);
     }
+}
+
+fn apply_count_change(
+    count: &Cell<i32>,
+    access_tree: &AccessTree<Rc<Window>, CounterElementId>,
+    nodes: CounterNodes,
+    window: &Window,
+    amount: i32,
+) {
+    let new_count = count.get().saturating_add(amount);
+    count.set(new_count);
+
+    let focused_node = if amount < 0 {
+        nodes.decrement
+    } else {
+        nodes.increment
+    };
+    access_tree.set_focus(nodes.root, Some(focused_node));
+    access_tree.set_name(nodes.value, new_count.to_string());
+
+    update_window_title(window, new_count);
+    window.request_redraw();
+}
+
+fn update_window_title(window: &Window, count: i32) {
+    window.set_title(&format!(
+        "Counter: {count}  |  Down/left click: -  Up/right click: +"
+    ));
 }
 
 fn draw_counter(context: &mut RenderContext, layout: CounterLayout, count: i32) {
