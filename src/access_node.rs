@@ -11,7 +11,7 @@ use crate::access_window::AccessNodeContext;
 use crate::live_setting::LiveSetting;
 use crate::roles::Role;
 use crate::text::{SupportedTextSelection, TextData};
-use crate::{AccessKey, SelectionData};
+use crate::{AccessKey, ScrollData, SelectionData};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -36,10 +36,12 @@ pub struct AccessNode<T: AccessNodeContext> {
     value: String,
 
     text_selection: SupportedTextSelection,
+    #[allow(dead_code)]
     text_data: Option<Box<TextData>>,
     context: Option<T>,
 
     selection_data: Option<SelectionData>,
+    scroll_data: ScrollData,
 }
 
 impl<T: AccessNodeContext> Clone for AccessNode<T> {
@@ -59,6 +61,7 @@ impl<T: AccessNodeContext> Clone for AccessNode<T> {
             text_data: None,
             context: self.context.clone(),
             selection_data: self.selection_data.clone(),
+            scroll_data: self.scroll_data
         }
     }
 }
@@ -81,6 +84,7 @@ impl<T: AccessNodeContext> AccessNode<T> {
             text_data: None,
             context: None,
             selection_data: None,
+            scroll_data: ScrollData::None,
         }
     }
 
@@ -198,6 +202,14 @@ impl<T: AccessNodeContext> AccessNode<T> {
     /// Gets this node's selection data.
     pub fn selection_data(&self) -> Option<&SelectionData> {
         self.selection_data.as_ref()
+    }
+
+    pub fn scroll_data(&self) -> &ScrollData {
+        &self.scroll_data
+    }
+
+    pub fn set_scroll_data(&mut self, scroll_data: ScrollData) {
+        self.scroll_data = scroll_data;
     }
 }
 

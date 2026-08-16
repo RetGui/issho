@@ -15,6 +15,7 @@ mod access_event;
 mod error;
 mod selection_data;
 mod text;
+mod scroll_data;
 
 pub mod platforms;
 
@@ -29,5 +30,6 @@ pub use crate::live_setting::LiveSetting;
 pub use crate::roles::Role;
 pub use crate::selection_data::{SelectionData, SelectionGroup, SelectionGroupItem};
 pub use crate::text::SupportedTextSelection;
+pub use crate::scroll_data::{ScrollAmount, ScrollContainerData, ScrollData, ScrollEvent};
 
 pub use slotmap::DefaultKey as AccessKey;

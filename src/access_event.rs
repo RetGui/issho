@@ -1,4 +1,5 @@
 use core::ops::Range;
+use crate::ScrollEvent;
 
 /// Accessibility Events.
 pub enum AccessEvent {
@@ -14,4 +15,8 @@ pub enum AccessEvent {
     AddToSelection,
     /// Removes the current element from the collection of selected items.
     UnSelect,
+    /// Scroll.
+    Scroll(ScrollEvent),
+    /// Scroll the node into the viewport.
+    ScrollIntoView,
 }

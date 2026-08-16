@@ -18,39 +18,7 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::System::Ole::{SafeArrayCreateVector, SafeArrayDestroy, SafeArrayPutElement};
 use windows::Win32::System::Variant::{VARIANT, VT_I4, VT_R8, VT_UNKNOWN};
-use windows::Win32::UI::Accessibility::{
-    Assertive as UiaAssertive, IInvokeProvider, IInvokeProvider_Impl, IRawElementProviderFragment,
-    IRawElementProviderFragment_Impl, IRawElementProviderFragmentRoot,
-    IRawElementProviderFragmentRoot_Impl, IRawElementProviderSimple,
-    IRawElementProviderSimple_Impl, ISelectionItemProvider, ISelectionItemProvider_Impl,
-    ISelectionProvider, ISelectionProvider_Impl, ITextProvider, ITextProvider_Impl,
-    ITextRangeProvider, ITextRangeProvider_Impl, IToggleProvider, IToggleProvider_Impl,
-    NavigateDirection, NavigateDirection_FirstChild, NavigateDirection_LastChild,
-    NavigateDirection_NextSibling, NavigateDirection_Parent, NavigateDirection_PreviousSibling,
-    Off as UiaOff, Polite as UiaPolite, ProviderOptions, ProviderOptions_ServerSideProvider,
-    ProviderOptions_UseComThreading, SupportedTextSelection, SupportedTextSelection_Single,
-    TextPatternRangeEndpoint, TextUnit, TextUnit_Character, ToggleState, ToggleState_Off,
-    ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId,
-    UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId,
-    UIA_E_ELEMENTNOTAVAILABLE, UIA_EVENT_ID, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId,
-    UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId,
-    UIA_ImageControlTypeId, UIA_Invoke_InvokedEventId, UIA_InvokePatternId,
-    UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId, UIA_IsEnabledPropertyId,
-    UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId, UIA_ListItemControlTypeId,
-    UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId, UIA_MenuControlTypeId,
-    UIA_MenuItemControlTypeId, UIA_NamePropertyId, UIA_NativeWindowHandlePropertyId,
-    UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId, UIA_ProgressBarControlTypeId,
-    UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId,
-    UIA_SelectionItem_ElementAddedToSelectionEventId,
-    UIA_SelectionItem_ElementRemovedFromSelectionEventId, UIA_SelectionItem_ElementSelectedEventId,
-    UIA_SelectionItemPatternId, UIA_SelectionPatternId, UIA_SeparatorControlTypeId,
-    UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID, UIA_TabControlTypeId, UIA_TabItemControlTypeId,
-    UIA_TextControlTypeId, UIA_TextPatternId, UIA_TogglePatternId, UIA_ToggleToggleStatePropertyId,
-    UIA_ToolBarControlTypeId, UIA_TreeControlTypeId, UIA_TreeItemControlTypeId,
-    UIA_ValueValuePropertyId, UIA_WindowControlTypeId, UiaAppendRuntimeId, UiaHostProviderFromHwnd,
-    UiaPoint, UiaRaiseAutomationEvent, UiaRaiseAutomationPropertyChangedEvent, UiaRect,
-    UiaReturnRawElementProvider, UiaRootObjectId,
-};
+use windows::Win32::UI::Accessibility::{Assertive as UiaAssertive, IInvokeProvider, IInvokeProvider_Impl, IRawElementProviderFragment, IRawElementProviderFragment_Impl, IRawElementProviderFragmentRoot, IRawElementProviderFragmentRoot_Impl, IRawElementProviderSimple, IRawElementProviderSimple_Impl, IScrollItemProvider, IScrollItemProvider_Impl, IScrollProvider, IScrollProvider_Impl, ISelectionItemProvider, ISelectionItemProvider_Impl, ISelectionProvider, ISelectionProvider_Impl, ITextProvider, ITextProvider_Impl, ITextRangeProvider, ITextRangeProvider_Impl, IToggleProvider, IToggleProvider_Impl, NavigateDirection, NavigateDirection_FirstChild, NavigateDirection_LastChild, NavigateDirection_NextSibling, NavigateDirection_Parent, NavigateDirection_PreviousSibling, Off as UiaOff, Polite as UiaPolite, ProviderOptions, ProviderOptions_ServerSideProvider, ProviderOptions_UseComThreading, ScrollAmount, ScrollAmount_LargeDecrement, ScrollAmount_LargeIncrement, ScrollAmount_NoAmount, ScrollAmount_SmallDecrement, ScrollAmount_SmallIncrement, SupportedTextSelection, SupportedTextSelection_Single, TextPatternRangeEndpoint, TextUnit, TextUnit_Character, ToggleState, ToggleState_Off, ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId, UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId, UIA_E_ELEMENTNOTAVAILABLE, UIA_EVENT_ID, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId, UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId, UIA_ImageControlTypeId, UIA_Invoke_InvokedEventId, UIA_InvokePatternId, UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId, UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId, UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId, UIA_MenuControlTypeId, UIA_MenuItemControlTypeId, UIA_NamePropertyId, UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId, UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId, UIA_SelectionItem_ElementAddedToSelectionEventId, UIA_SelectionItem_ElementRemovedFromSelectionEventId, UIA_SelectionItem_ElementSelectedEventId, UIA_SelectionItemPatternId, UIA_SelectionPatternId, UIA_SeparatorControlTypeId, UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID, UIA_TabControlTypeId, UIA_TabItemControlTypeId, UIA_TextControlTypeId, UIA_TextPatternId, UIA_TogglePatternId, UIA_ToggleToggleStatePropertyId, UIA_ToolBarControlTypeId, UIA_TreeControlTypeId, UIA_TreeItemControlTypeId, UIA_ValueValuePropertyId, UIA_WindowControlTypeId, UiaAppendRuntimeId, UiaHostProviderFromHwnd, UiaPoint, UiaRaiseAutomationEvent, UiaRaiseAutomationPropertyChangedEvent, UiaRect, UiaReturnRawElementProvider, UiaRootObjectId, UIA_ScrollPatternId, UIA_ScrollPatternNoScroll, UIA_ScrollItemPatternId};
 use windows::Win32::UI::Accessibility::{
     SupportedTextSelection_Multiple, SupportedTextSelection_None, TextUnit_Document,
     TextUnit_Format, TextUnit_Line, TextUnit_Page, TextUnit_Paragraph, TextUnit_Word,
@@ -64,10 +32,7 @@ use windows_core::{BOOL, Ref};
 use crate::access_tree::WeakAccessTree;
 use crate::access_window::AccessNodeContext;
 use crate::platforms::AccessPlatform;
-use crate::{
-    AccessEvent, AccessKey, AccessProperty, AccessPropertyValue, AccessRect, AccessTree,
-    AccessWindow, LiveSetting, Role, SelectionData,
-};
+use crate::{AccessEvent, AccessKey, AccessProperty, AccessPropertyValue, AccessRect, AccessTree, AccessWindow, LiveSetting, Role, ScrollData, ScrollEvent, SelectionData};
 
 // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-providersoverview
 
@@ -460,7 +425,9 @@ impl Default for WindowsPlatform {
     ITextRangeProvider,
     ISelectionProvider,
     ISelectionItemProvider,
-    IInvokeProvider
+    IInvokeProvider,
+    IScrollProvider,
+    IScrollItemProvider
 )]
 struct WindowsProvider<T, U>
 where
@@ -631,6 +598,22 @@ where
         let node = access_tree
             .get_node(self.node)
             .ok_or_else(element_not_available)?;
+
+
+        if pattern_id == UIA_ScrollPatternId {
+            return match node.scroll_data() {
+                ScrollData::ScrollContainer(_scroll_container) => {
+                    let provider: IScrollProvider = self.to_interface();
+                    return provider.cast();
+                }
+                _ => Err(windows_core::Error::empty())
+            }
+        }
+
+        if pattern_id == UIA_ScrollItemPatternId {
+            let provider: IScrollItemProvider = self.to_interface();
+            return provider.cast();
+        }
 
         if pattern_id == UIA_TogglePatternId && node.role() == Role::CheckBox {
             let provider: IToggleProvider = self.to_interface();
@@ -1516,6 +1499,177 @@ where
 
         let provider: IRawElementProviderSimple = self.to_interface();
         unsafe { UiaRaiseAutomationEvent(&provider, UIA_Invoke_InvokedEventId) }
+    }
+}
+
+fn convert_scroll_amount(scroll_amount: ScrollAmount) -> crate::ScrollAmount {
+    match scroll_amount {
+        ScrollAmount_LargeDecrement => crate::ScrollAmount::LargeDecrement,
+        ScrollAmount_SmallDecrement => crate::ScrollAmount::SmallDecrement,
+        ScrollAmount_SmallIncrement => crate::ScrollAmount::SmallIncrement,
+        ScrollAmount_LargeIncrement => crate::ScrollAmount::LargeIncrement,
+        ScrollAmount_NoAmount => crate::ScrollAmount::NoChange,
+        _ => unreachable!(),
+    }
+}
+
+// Provides access to controls that act as scrollable containers for a collection of child objects.
+// The children of this control must implement IScrollItemProvider.
+impl<T, U> IScrollProvider_Impl for WindowsProvider_Impl<T, U>
+where
+    T: AccessWindow,
+    U: AccessNodeContext,
+{
+    /// Scrolls the visible region of the content area horizontally and vertically.
+    #[allow(non_snake_case)]
+    fn Scroll(
+        &self,
+        horizontal_amount: ScrollAmount,
+        vertical_amount: ScrollAmount,
+    ) -> windows_core::Result<()> {
+        let access_tree = self.access_tree()?;
+        let scroll_event = ScrollEvent {
+            horizontal: convert_scroll_amount(horizontal_amount),
+            vertical: convert_scroll_amount(vertical_amount),
+        };
+        access_tree
+            .dispatch_access_event(self.node, AccessEvent::Scroll(scroll_event))
+            .map_err(|_| element_not_available())
+    }
+
+    #[allow(non_snake_case)]
+    fn SetScrollPercent(
+        &self,
+        horizontal_percent: f64,
+        vertical_percent: f64,
+    ) -> windows_core::Result<()> {
+        let access_tree = self.access_tree()?;
+        let scroll_event = ScrollEvent {
+            horizontal: crate::ScrollAmount::GoToPercentage(horizontal_percent),
+            vertical: crate::ScrollAmount::GoToPercentage(vertical_percent),
+        };
+        access_tree
+            .dispatch_access_event(self.node, AccessEvent::Scroll(scroll_event))
+            .map_err(|_| element_not_available())
+    }
+
+    /// Specifies the horizontal scroll position.
+    #[allow(non_snake_case)]
+    fn HorizontalScrollPercent(&self) -> windows_core::Result<f64> {
+        // The horizontal scroll position can be reported as UIA_ScrollPatternNoScroll if no valid
+        // position is available; for example, if the window does not have a horizontal scroll bar.
+        let access_tree = self.access_tree()?;
+        let node = access_tree
+            .get_node(self.node)
+            .ok_or_else(element_not_available)?;
+        match node.scroll_data() {
+            ScrollData::ScrollContainer(scroll_container) => {
+                Ok(scroll_container.horizontal_percentage.unwrap_or(UIA_ScrollPatternNoScroll))
+            }
+            _ => unreachable!()
+        }
+    }
+
+    /// Specifies the vertical scroll position.
+    #[allow(non_snake_case)]
+    fn VerticalScrollPercent(&self) -> windows_core::Result<f64> {
+        // The vertical scroll position can be reported as UIA_ScrollPatternNoScroll if no valid
+        // position is available; for example, if the window does not have a vertical scroll bar.
+        let access_tree = self.access_tree()?;
+        let node = access_tree
+            .get_node(self.node)
+            .ok_or_else(element_not_available)?;
+        match node.scroll_data() {
+            ScrollData::ScrollContainer(scroll_container) => {
+                Ok(scroll_container.vertical_percentage.unwrap_or(UIA_ScrollPatternNoScroll))
+            }
+            _ => unreachable!()
+        }
+    }
+
+    // Specifies the horizontal size of the viewable region.
+    #[allow(non_snake_case)]
+    fn HorizontalViewSize(&self) -> windows_core::Result<f64> {
+        let access_tree = self.access_tree()?;
+        let node = access_tree
+            .get_node(self.node)
+            .ok_or_else(element_not_available)?;
+        match node.scroll_data() {
+            ScrollData::ScrollContainer(scroll_container) => {
+                Ok(scroll_container.horizontal_size)
+            }
+            _ => unreachable!()
+        }
+    }
+
+    /// Specifies the vertical size of the viewable region.
+    #[allow(non_snake_case)]
+    fn VerticalViewSize(&self) -> windows_core::Result<f64> {
+        let access_tree = self.access_tree()?;
+        let node = access_tree
+            .get_node(self.node)
+            .ok_or_else(element_not_available)?;
+        match node.scroll_data() {
+            ScrollData::ScrollContainer(scroll_container) => {
+                Ok(scroll_container.vertical_size)
+            }
+            _ => unreachable!()
+        }
+    }
+
+    /// Indicates whether the control can scroll horizontally.
+    #[allow(non_snake_case)]
+    fn HorizontallyScrollable(&self) -> windows_core::Result<BOOL> {
+        // This property can be dynamic. For example, the content area of the control might not be
+        // larger than the current viewable area, meaning IScrollProvider::HorizontallyScrollable is
+        // FALSE. However, either resizing the control or adding child items may increase the bounds
+        // of the content area beyond the viewable area, meaning IScrollProvider::HorizontallyScrollable is TRUE.
+        let access_tree = self.access_tree()?;
+        let node = access_tree
+            .get_node(self.node)
+            .ok_or_else(element_not_available)?;
+        match node.scroll_data() {
+            ScrollData::ScrollContainer(scroll_container) => {
+                Ok(scroll_container.horizontal_percentage.is_some().into())
+            }
+            _ => unreachable!()
+        }
+    }
+
+    /// Indicates whether the control can scroll vertically.
+    #[allow(non_snake_case)]
+    fn VerticallyScrollable(&self) -> windows_core::Result<BOOL> {
+        // This property can be dynamic. For example, the content area of the control might not be
+        // larger than the viewable area, meaning IScrollProvider::VerticallyScrollable is FALSE.
+        // However, resizing the control or adding child items may increase the bounds of the content
+        // area beyond the viewable area, meaning that IScrollProvider::VerticallyScrollable is TRUE.
+        let access_tree = self.access_tree()?;
+        let node = access_tree
+            .get_node(self.node)
+            .ok_or_else(element_not_available)?;
+        match node.scroll_data() {
+            ScrollData::ScrollContainer(scroll_container) => {
+                Ok(scroll_container.vertical_percentage.is_some().into())
+            }
+            _ => unreachable!()
+        }
+    }
+}
+
+// Provides access to individual child controls of containers that implement IScrollProvider.
+impl<T, U> IScrollItemProvider_Impl for WindowsProvider_Impl<T, U>
+where
+    T: AccessWindow,
+    U: AccessNodeContext,
+{
+    /// Scrolls the content area of a container object in order to display the control within the visible region (viewport) of the container.
+    #[allow(non_snake_case)]
+    fn ScrollIntoView(&self) -> windows_core::Result<()> {
+        // This method will not guarantee the position of the control within the visible region (viewport) of the container.
+        let access_tree = self.access_tree()?;
+        access_tree
+            .dispatch_access_event(self.node, AccessEvent::ScrollIntoView)
+            .map_err(|_| element_not_available())
     }
 }
 
