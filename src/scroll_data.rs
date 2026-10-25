@@ -5,7 +5,7 @@ pub enum ScrollAmount {
     SmallDecrement,
     LargeDecrement,
     NoChange,
-    GoToPercentage(f64)
+    GoToPercentage(f64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

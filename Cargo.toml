@@ -2,7 +2,7 @@
 name = "issho"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.89"
+rust-version = "1.99.1"
 description = "Retained accessibility infrastructure for custom Rust user interfaces"
 documentation = "https://docs.rs/issho"
 readme = "README.md"
@@ -25,6 +25,19 @@ raw-window-handle = { version = "0.6.2", default-features = false }
 slotmap = { version = "1.1.1", default-features = false }
 smallvec = { version = "1.15.2", default-features = false }
 smol_str = { version = "0.3.6", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { version = "0.6.4", default-features = false, features = ["std"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = [
+    "std", "NSArray", "NSString", "NSGeometry", "NSValue", "NSRange",
+] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = [
+    "std", "NSAccessibility", "NSAccessibilityConstants", "NSAccessibilityElement",
+    "NSView", "NSWindow", "NSResponder", "objc2-core-foundation",
+] }
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSGraphics"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.62.2", default-features = false, features = [

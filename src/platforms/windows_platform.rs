@@ -18,7 +18,43 @@ use windows::Win32::System::Com::{
 };
 use windows::Win32::System::Ole::{SafeArrayCreateVector, SafeArrayDestroy, SafeArrayPutElement};
 use windows::Win32::System::Variant::{VARIANT, VT_I4, VT_R8, VT_UNKNOWN};
-use windows::Win32::UI::Accessibility::{Assertive as UiaAssertive, IInvokeProvider, IInvokeProvider_Impl, IRawElementProviderFragment, IRawElementProviderFragment_Impl, IRawElementProviderFragmentRoot, IRawElementProviderFragmentRoot_Impl, IRawElementProviderSimple, IRawElementProviderSimple_Impl, IScrollItemProvider, IScrollItemProvider_Impl, IScrollProvider, IScrollProvider_Impl, ISelectionItemProvider, ISelectionItemProvider_Impl, ISelectionProvider, ISelectionProvider_Impl, ITextProvider, ITextProvider_Impl, ITextRangeProvider, ITextRangeProvider_Impl, IToggleProvider, IToggleProvider_Impl, NavigateDirection, NavigateDirection_FirstChild, NavigateDirection_LastChild, NavigateDirection_NextSibling, NavigateDirection_Parent, NavigateDirection_PreviousSibling, Off as UiaOff, Polite as UiaPolite, ProviderOptions, ProviderOptions_ServerSideProvider, ProviderOptions_UseComThreading, ScrollAmount, ScrollAmount_LargeDecrement, ScrollAmount_LargeIncrement, ScrollAmount_NoAmount, ScrollAmount_SmallDecrement, ScrollAmount_SmallIncrement, SupportedTextSelection, SupportedTextSelection_Single, TextPatternRangeEndpoint, TextUnit, TextUnit_Character, ToggleState, ToggleState_Off, ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId, UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId, UIA_E_ELEMENTNOTAVAILABLE, UIA_EVENT_ID, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId, UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId, UIA_ImageControlTypeId, UIA_Invoke_InvokedEventId, UIA_InvokePatternId, UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId, UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId, UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId, UIA_MenuControlTypeId, UIA_MenuItemControlTypeId, UIA_NamePropertyId, UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId, UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId, UIA_SelectionItem_ElementAddedToSelectionEventId, UIA_SelectionItem_ElementRemovedFromSelectionEventId, UIA_SelectionItem_ElementSelectedEventId, UIA_SelectionItemPatternId, UIA_SelectionPatternId, UIA_SeparatorControlTypeId, UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID, UIA_TabControlTypeId, UIA_TabItemControlTypeId, UIA_TextControlTypeId, UIA_TextPatternId, UIA_TogglePatternId, UIA_ToggleToggleStatePropertyId, UIA_ToolBarControlTypeId, UIA_TreeControlTypeId, UIA_TreeItemControlTypeId, UIA_ValueValuePropertyId, UIA_WindowControlTypeId, UiaAppendRuntimeId, UiaHostProviderFromHwnd, UiaPoint, UiaRaiseAutomationEvent, UiaRaiseAutomationPropertyChangedEvent, UiaRect, UiaReturnRawElementProvider, UiaRootObjectId, UIA_ScrollPatternId, UIA_ScrollPatternNoScroll, UIA_ScrollItemPatternId};
+use windows::Win32::UI::Accessibility::{
+    Assertive as UiaAssertive, IInvokeProvider, IInvokeProvider_Impl, IRawElementProviderFragment,
+    IRawElementProviderFragment_Impl, IRawElementProviderFragmentRoot,
+    IRawElementProviderFragmentRoot_Impl, IRawElementProviderSimple,
+    IRawElementProviderSimple_Impl, IScrollItemProvider, IScrollItemProvider_Impl, IScrollProvider,
+    IScrollProvider_Impl, ISelectionItemProvider, ISelectionItemProvider_Impl, ISelectionProvider,
+    ISelectionProvider_Impl, ITextProvider, ITextProvider_Impl, ITextRangeProvider,
+    ITextRangeProvider_Impl, IToggleProvider, IToggleProvider_Impl, NavigateDirection,
+    NavigateDirection_FirstChild, NavigateDirection_LastChild, NavigateDirection_NextSibling,
+    NavigateDirection_Parent, NavigateDirection_PreviousSibling, Off as UiaOff,
+    Polite as UiaPolite, ProviderOptions, ProviderOptions_ServerSideProvider,
+    ProviderOptions_UseComThreading, ScrollAmount, ScrollAmount_LargeDecrement,
+    ScrollAmount_LargeIncrement, ScrollAmount_NoAmount, ScrollAmount_SmallDecrement,
+    ScrollAmount_SmallIncrement, SupportedTextSelection, SupportedTextSelection_Single,
+    TextPatternRangeEndpoint, TextUnit, TextUnit_Character, ToggleState, ToggleState_Off,
+    ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId,
+    UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId,
+    UIA_E_ELEMENTNOTAVAILABLE, UIA_EVENT_ID, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId,
+    UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId,
+    UIA_ImageControlTypeId, UIA_Invoke_InvokedEventId, UIA_InvokePatternId,
+    UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId, UIA_IsEnabledPropertyId,
+    UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId, UIA_ListItemControlTypeId,
+    UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId, UIA_MenuControlTypeId,
+    UIA_MenuItemControlTypeId, UIA_NamePropertyId, UIA_NativeWindowHandlePropertyId,
+    UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId, UIA_ProgressBarControlTypeId,
+    UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId, UIA_ScrollItemPatternId,
+    UIA_ScrollPatternId, UIA_ScrollPatternNoScroll,
+    UIA_SelectionItem_ElementAddedToSelectionEventId,
+    UIA_SelectionItem_ElementRemovedFromSelectionEventId, UIA_SelectionItem_ElementSelectedEventId,
+    UIA_SelectionItemPatternId, UIA_SelectionPatternId, UIA_SeparatorControlTypeId,
+    UIA_SliderControlTypeId, UIA_TEXTATTRIBUTE_ID, UIA_TabControlTypeId, UIA_TabItemControlTypeId,
+    UIA_TextControlTypeId, UIA_TextPatternId, UIA_TogglePatternId, UIA_ToggleToggleStatePropertyId,
+    UIA_ToolBarControlTypeId, UIA_TreeControlTypeId, UIA_TreeItemControlTypeId,
+    UIA_ValueValuePropertyId, UIA_WindowControlTypeId, UiaAppendRuntimeId, UiaHostProviderFromHwnd,
+    UiaPoint, UiaRaiseAutomationEvent, UiaRaiseAutomationPropertyChangedEvent, UiaRect,
+    UiaReturnRawElementProvider, UiaRootObjectId,
+};
 use windows::Win32::UI::Accessibility::{
     SupportedTextSelection_Multiple, SupportedTextSelection_None, TextUnit_Document,
     TextUnit_Format, TextUnit_Line, TextUnit_Page, TextUnit_Paragraph, TextUnit_Word,
@@ -32,7 +68,10 @@ use windows_core::{BOOL, Ref};
 use crate::access_tree::WeakAccessTree;
 use crate::access_window::AccessNodeContext;
 use crate::platforms::AccessPlatform;
-use crate::{AccessEvent, AccessKey, AccessProperty, AccessPropertyValue, AccessRect, AccessTree, AccessWindow, LiveSetting, Role, ScrollData, ScrollEvent, SelectionData};
+use crate::{
+    AccessEvent, AccessKey, AccessProperty, AccessPropertyValue, AccessRect, AccessTree,
+    AccessWindow, LiveSetting, Role, ScrollData, ScrollEvent, SelectionData,
+};
 
 // https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-providersoverview
 
@@ -599,15 +638,14 @@ where
             .get_node(self.node)
             .ok_or_else(element_not_available)?;
 
-
         if pattern_id == UIA_ScrollPatternId {
             return match node.scroll_data() {
                 ScrollData::ScrollContainer(_scroll_container) => {
                     let provider: IScrollProvider = self.to_interface();
                     return provider.cast();
                 }
-                _ => Err(windows_core::Error::empty())
-            }
+                _ => Err(windows_core::Error::empty()),
+            };
         }
 
         if pattern_id == UIA_ScrollItemPatternId {
@@ -1563,10 +1601,10 @@ where
             .get_node(self.node)
             .ok_or_else(element_not_available)?;
         match node.scroll_data() {
-            ScrollData::ScrollContainer(scroll_container) => {
-                Ok(scroll_container.horizontal_percentage.unwrap_or(UIA_ScrollPatternNoScroll))
-            }
-            _ => unreachable!()
+            ScrollData::ScrollContainer(scroll_container) => Ok(scroll_container
+                .horizontal_percentage
+                .unwrap_or(UIA_ScrollPatternNoScroll)),
+            _ => unreachable!(),
         }
     }
 
@@ -1580,10 +1618,10 @@ where
             .get_node(self.node)
             .ok_or_else(element_not_available)?;
         match node.scroll_data() {
-            ScrollData::ScrollContainer(scroll_container) => {
-                Ok(scroll_container.vertical_percentage.unwrap_or(UIA_ScrollPatternNoScroll))
-            }
-            _ => unreachable!()
+            ScrollData::ScrollContainer(scroll_container) => Ok(scroll_container
+                .vertical_percentage
+                .unwrap_or(UIA_ScrollPatternNoScroll)),
+            _ => unreachable!(),
         }
     }
 
@@ -1595,10 +1633,8 @@ where
             .get_node(self.node)
             .ok_or_else(element_not_available)?;
         match node.scroll_data() {
-            ScrollData::ScrollContainer(scroll_container) => {
-                Ok(scroll_container.horizontal_size)
-            }
-            _ => unreachable!()
+            ScrollData::ScrollContainer(scroll_container) => Ok(scroll_container.horizontal_size),
+            _ => unreachable!(),
         }
     }
 
@@ -1610,10 +1646,8 @@ where
             .get_node(self.node)
             .ok_or_else(element_not_available)?;
         match node.scroll_data() {
-            ScrollData::ScrollContainer(scroll_container) => {
-                Ok(scroll_container.vertical_size)
-            }
-            _ => unreachable!()
+            ScrollData::ScrollContainer(scroll_container) => Ok(scroll_container.vertical_size),
+            _ => unreachable!(),
         }
     }
 
@@ -1632,7 +1666,7 @@ where
             ScrollData::ScrollContainer(scroll_container) => {
                 Ok(scroll_container.horizontal_percentage.is_some().into())
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -1651,7 +1685,7 @@ where
             ScrollData::ScrollContainer(scroll_container) => {
                 Ok(scroll_container.vertical_percentage.is_some().into())
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }

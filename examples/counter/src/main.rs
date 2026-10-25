@@ -9,10 +9,10 @@ use vello_cpu::{Pixmap, RenderContext, Resources, color::palette::css, kurbo::Re
 use winit::{
     application::ApplicationHandler,
     dpi::{PhysicalPosition, PhysicalSize},
-    event::{ElementState, MouseButton, WindowEvent},
-    event_loop::{ActiveEventLoop, EventLoop},
+    event::{ButtonSource, ElementState, MouseButton, WindowEvent},
+    event_loop::{ActiveEventLoop, EventLoop, OwnedDisplayHandle},
     keyboard::{Key, NamedKey},
-    window::{Window, WindowId},
+    window::{Window, WindowAttributes, WindowId},
 };
 
 const WINDOW_WIDTH: u32 = 480;
@@ -66,16 +66,16 @@ impl CounterLayout {
 }
 
 struct VelloRenderer {
-    surface: Surface<Rc<Window>, Rc<Window>>,
-    _context: Context<Rc<Window>>,
+    surface: Surface<OwnedDisplayHandle, Rc<dyn Window>>,
+    _context: Context<OwnedDisplayHandle>,
     render_context: RenderContext,
     resources: Resources,
     pixmap: Pixmap,
 }
 
 impl VelloRenderer {
-    fn new(window: Rc<Window>) -> Result<Self, Box<dyn Error>> {
-        let context = Context::new(window.clone())?;
+    fn new(window: Rc<dyn Window>, display: OwnedDisplayHandle) -> Result<Self, Box<dyn Error>> {
+        let context = Context::new(display)?;
         let surface = Surface::new(&context, window)?;
 
         Ok(Self {
@@ -87,8 +87,8 @@ impl VelloRenderer {
         })
     }
 
-    fn draw(&mut self, window: &Window, count: i32) -> Result<(), Box<dyn Error>> {
-        let size = window.inner_size();
+    fn draw(&mut self, window: &dyn Window, count: i32) -> Result<(), Box<dyn Error>> {
+        let size = window.surface_size();
         let (Some(surface_width), Some(surface_height)) =
             (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
         else {
@@ -132,26 +132,26 @@ enum CounterElementId {
 }
 
 struct App {
-    window: Option<Rc<Window>>,
+    window: Option<Rc<dyn Window>>,
     renderer: Option<VelloRenderer>,
-    access_tree: AccessTree<Rc<Window>, CounterElementId>,
+    access_tree: AccessTree<Rc<dyn Window>, CounterElementId>,
     nodes: Option<CounterNodes>,
     cursor_position: PhysicalPosition<f64>,
     count: Rc<Cell<i32>>,
 }
 
 impl ApplicationHandler for App {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+    fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
         if self.window.is_some() {
             return;
         }
 
-        let attributes = Window::default_attributes()
+        let attributes = WindowAttributes::default()
             .with_title("Counter")
-            .with_inner_size(PhysicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT))
-            .with_min_inner_size(PhysicalSize::new(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT))
-            .with_max_inner_size(PhysicalSize::new(MAX_WINDOW_SIZE, MAX_WINDOW_SIZE));
-        let window = Rc::new(
+            .with_surface_size(PhysicalSize::new(WINDOW_WIDTH, WINDOW_HEIGHT))
+            .with_min_surface_size(PhysicalSize::new(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT))
+            .with_max_surface_size(PhysicalSize::new(MAX_WINDOW_SIZE, MAX_WINDOW_SIZE));
+        let window: Rc<dyn Window> = Rc::from(
             event_loop
                 .create_window(attributes)
                 .expect("failed to create window"),
@@ -199,13 +199,14 @@ impl ApplicationHandler for App {
                     _ => return Ok(()),
                 };
 
-                apply_count_change(&count, access_tree, nodes, &window, amount);
+                apply_count_change(&count, access_tree, nodes, window.as_ref(), amount);
                 Ok(())
             }
         });
 
         self.renderer = Some(
-            VelloRenderer::new(window.clone()).expect("failed to create the CPU rendering surface"),
+            VelloRenderer::new(window.clone(), event_loop.owned_display_handle())
+                .expect("failed to create the CPU rendering surface"),
         );
         self.window = Some(window.clone());
         self.nodes = Some(nodes);
@@ -221,7 +222,7 @@ impl ApplicationHandler for App {
 
     fn window_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
+        event_loop: &dyn ActiveEventLoop,
         window_id: WindowId,
         event: WindowEvent,
     ) {
@@ -244,7 +245,7 @@ impl ApplicationHandler for App {
                     }
                 }
             }
-            WindowEvent::Resized(_) => {
+            WindowEvent::SurfaceResized(_) => {
                 self.update_accessibility_bounds();
                 self.request_redraw();
             }
@@ -254,23 +255,21 @@ impl ApplicationHandler for App {
                     event_loop.exit();
                 }
             }
-            WindowEvent::CursorMoved { position, .. } => {
+            WindowEvent::PointerMoved { position, .. } => {
                 self.cursor_position = position;
             }
-            WindowEvent::MouseInput {
+            WindowEvent::PointerButton {
                 state: ElementState::Pressed,
-                button: MouseButton::Left,
+                button: ButtonSource::Mouse(MouseButton::Left),
                 ..
             } => self.handle_click(),
             WindowEvent::KeyboardInput { event, .. }
                 if event.state == ElementState::Pressed && !event.repeat =>
             {
-                match event.logical_key {
+                match event.logical_key.as_ref() {
                     Key::Named(NamedKey::ArrowDown) => self.change_count(-1),
                     Key::Named(NamedKey::ArrowUp) => self.change_count(1),
-                    Key::Named(NamedKey::Enter) | Key::Named(NamedKey::Space) => {
-                        self.activate_focused()
-                    }
+                    Key::Named(NamedKey::Enter) | Key::Character(" ") => self.activate_focused(),
                     _ => {}
                 }
             }
@@ -299,7 +298,13 @@ impl App {
         let (Some(window), Some(nodes)) = (&self.window, self.nodes) else {
             return;
         };
-        apply_count_change(&self.count, &self.access_tree, nodes, window, amount);
+        apply_count_change(
+            &self.count,
+            &self.access_tree,
+            nodes,
+            window.as_ref(),
+            amount,
+        );
     }
 
     fn activate_focused(&mut self) {
@@ -318,7 +323,7 @@ impl App {
         let Some(window) = &self.window else {
             return;
         };
-        let layout = CounterLayout::new(window.inner_size());
+        let layout = CounterLayout::new(window.surface_size());
 
         if layout
             .decrement
@@ -341,7 +346,7 @@ impl App {
             return Ok(());
         };
 
-        renderer.draw(&window, self.count.get())
+        renderer.draw(window.as_ref(), self.count.get())
     }
 
     fn request_redraw(&self) {
@@ -352,7 +357,7 @@ impl App {
 
     fn update_title(&self) {
         if let Some(window) = &self.window {
-            update_window_title(window, self.count.get());
+            update_window_title(window.as_ref(), self.count.get());
         }
     }
 
@@ -361,7 +366,7 @@ impl App {
             return;
         };
 
-        let layout = CounterLayout::new(window.inner_size());
+        let layout = CounterLayout::new(window.surface_size());
 
         self.access_tree
             .get_node_mut(nodes.root)
@@ -384,9 +389,9 @@ impl App {
 
 fn apply_count_change(
     count: &Cell<i32>,
-    access_tree: &AccessTree<Rc<Window>, CounterElementId>,
+    access_tree: &AccessTree<Rc<dyn Window>, CounterElementId>,
     nodes: CounterNodes,
-    window: &Window,
+    window: &dyn Window,
     amount: i32,
 ) {
     let new_count = count.get().saturating_add(amount);
@@ -404,7 +409,7 @@ fn apply_count_change(
     window.request_redraw();
 }
 
-fn update_window_title(window: &Window, count: i32) {
+fn update_window_title(window: &dyn Window, count: i32) {
     window.set_title(&format!(
         "Counter: {count}  |  Down/left click: -  Up/right click: +"
     ));
@@ -547,6 +552,6 @@ const fn to_vello_rect(rect: AccessRect) -> Rect {
 fn main() -> Result<(), Box<dyn Error>> {
     simple_logger::SimpleLogger::new().init()?;
     let event_loop = EventLoop::new()?;
-    event_loop.run_app(&mut App::new())?;
+    event_loop.run_app(App::new())?;
     Ok(())
 }

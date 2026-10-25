@@ -30,6 +30,7 @@ pub struct AccessNode<T: AccessNodeContext> {
     bounding_rect: AccessRect,
     checked: bool,
     enabled: bool,
+    hidden: bool,
     live_setting: LiveSetting,
     name: SmolStr,
     role: Role,
@@ -53,6 +54,7 @@ impl<T: AccessNodeContext> Clone for AccessNode<T> {
             bounding_rect: self.bounding_rect,
             checked: self.checked,
             enabled: self.enabled,
+            hidden: self.hidden,
             live_setting: self.live_setting,
             name: self.name.clone(),
             role: self.role,
@@ -61,7 +63,7 @@ impl<T: AccessNodeContext> Clone for AccessNode<T> {
             text_data: None,
             context: self.context.clone(),
             selection_data: self.selection_data.clone(),
-            scroll_data: self.scroll_data
+            scroll_data: self.scroll_data,
         }
     }
 }
@@ -76,6 +78,7 @@ impl<T: AccessNodeContext> AccessNode<T> {
             bounding_rect: AccessRect::default(),
             checked: false,
             enabled: true,
+            hidden: false,
             live_setting: LiveSetting::Off,
             name: SmolStr::default(),
             role: Role::GenericContainer,
@@ -121,6 +124,14 @@ impl<T: AccessNodeContext> AccessNode<T> {
     /// Sets whether this node is enabled for user interaction.
     pub const fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
+    }
+
+    pub fn hidden(&self) -> bool {
+        self.hidden
+    }
+
+    pub fn set_hidden(&mut self, hidden: bool) {
+        self.hidden = hidden;
     }
 
     /// Returns the accessible name of this node.

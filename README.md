@@ -7,7 +7,7 @@ A retained accessibility tree.
 | Platform | Support |
 |----------|---------|
 | Windows  | ✅      |
-| macOS    | ❌      |
+| macOS    | ✅      |
 | Linux    | ❌      |
 | Android  | ❌      |
 | iOS      | ❌      |

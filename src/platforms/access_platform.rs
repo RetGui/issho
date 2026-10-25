@@ -12,6 +12,14 @@ pub trait AccessPlatform<T: AccessWindow, U: AccessNodeContext> {
     /// This should only be called once per a window.
     fn register_window(&self, window: T, access_tree: &AccessTree<T, U>) -> Result<(), ()>;
 
+    fn children_changed(
+        &self,
+        _node: AccessKey,
+        _access_tree: &AccessTree<T, U>,
+    ) -> Result<(), ()> {
+        Ok(())
+    }
+
     /// Notify the native accessibility platform that focus moved to a node.
     fn focus_changed(&self, node: AccessKey, access_tree: &AccessTree<T, U>) -> Result<(), ()>;
 

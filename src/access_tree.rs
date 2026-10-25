@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::String;
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 use alloc::rc::Weak;
 
 use core::cell::{Ref, RefCell, RefMut};
@@ -42,7 +42,7 @@ pub struct AccessTree<T: AccessWindow, U: AccessNodeContext> {
     internal: Rc<RefCell<AccessTreeInternal<T, U>>>,
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 #[derive(Clone)]
 pub(crate) struct WeakAccessTree<T: AccessWindow, U: AccessNodeContext> {
     internal: Weak<RefCell<AccessTreeInternal<T, U>>>,
@@ -65,7 +65,11 @@ impl<T: AccessWindow, U: AccessNodeContext> AccessTree<T, U> {
     ///
     /// Panics if `parent` is `Some` but is not a node in this tree.
     pub fn insert_node(&self, node: AccessNode<U>, parent: Option<AccessKey>) -> AccessKey {
-        self.internal.borrow_mut().insert_node(node, parent)
+        let key = self.internal.borrow_mut().insert_node(node, parent);
+        if let Some(parent) = parent {
+            self.notify_children_changed(parent);
+        }
+        key
     }
 
     /// Returns `true` if both handles refer to the same tree.
@@ -73,7 +77,7 @@ impl<T: AccessWindow, U: AccessNodeContext> AccessTree<T, U> {
         Rc::ptr_eq(&self.internal, &other.internal)
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     pub(crate) fn downgrade(&self) -> WeakAccessTree<T, U> {
         WeakAccessTree {
             internal: Rc::downgrade(&self.internal),
@@ -170,14 +174,27 @@ impl<T: AccessWindow, U: AccessNodeContext> AccessTree<T, U> {
     ///
     /// Panics if `parent` or any entry in `children` is not in this tree.
     pub fn set_children(&self, parent: AccessKey, children: &[AccessKey]) {
+        let old_parents: alloc::vec::Vec<_> = children
+            .iter()
+            .filter_map(|child| self.get_parent(*child))
+            .filter(|old_parent| *old_parent != parent)
+            .collect();
         self.internal.borrow_mut().set_children(parent, children);
+        for old_parent in old_parents {
+            self.notify_children_changed(old_parent);
+        }
+        self.notify_children_changed(parent);
     }
 
     /// Removes a node and all of its descendants.
     ///
     /// Does nothing if `node` is not in this tree.
     pub fn remove_node(&self, node: AccessKey) {
+        let parent = self.get_parent(node);
         self.internal.borrow_mut().remove_node(node);
+        if let Some(parent) = parent {
+            self.notify_children_changed(parent);
+        }
     }
 
     /// Detaches a node from its parent while preserving its descendants.
@@ -188,7 +205,11 @@ impl<T: AccessWindow, U: AccessNodeContext> AccessTree<T, U> {
     ///
     /// Panics if `node` is not in this tree.
     pub fn detach_node(&self, node: AccessKey) {
+        let parent = self.get_parent(node);
         self.internal.borrow_mut().detach_node(node);
+        if let Some(parent) = parent {
+            self.notify_children_changed(parent);
+        }
     }
 
     /// Moves `child` to the end of `parent`'s children.
@@ -201,7 +222,17 @@ impl<T: AccessWindow, U: AccessNodeContext> AccessTree<T, U> {
     /// Panics if either node is not in this tree, if `parent` and `child` are the
     /// same node, or if moving the child would create a cycle.
     pub fn append_child(&self, parent: AccessKey, child: AccessKey) {
+        let old_parent = self.get_parent(child);
         self.internal.borrow_mut().append_child(parent, child);
+        if let Some(old_parent) = old_parent.filter(|old_parent| *old_parent != parent) {
+            self.notify_children_changed(old_parent);
+        }
+        self.notify_children_changed(parent);
+    }
+
+    fn notify_children_changed(&self, node: AccessKey) {
+        let platform = self.internal.borrow().platform.clone();
+        let _ = platform.children_changed(node, self);
     }
 
     /// Returns a shared reference to `node`.
@@ -229,7 +260,38 @@ impl<T: AccessWindow, U: AccessNodeContext> AccessTree<T, U> {
     /// order for the first non-empty name. Returns an empty string if no name is
     /// found, or `None` if `node` does not belong to this tree.
     pub fn accessible_name(&self, node: AccessKey) -> Option<String> {
+        if self.is_hidden(node) {
+            return self.get_node(node).map(|_| String::new());
+        }
         self.internal.borrow().accessible_name(node)
+    }
+
+    pub fn is_hidden(&self, node: AccessKey) -> bool {
+        let internal = self.internal.borrow();
+        let mut current = Some(node);
+        while let Some(key) = current {
+            let Some(node) = internal.nodes.get(key) else {
+                return true;
+            };
+            if node.hidden() {
+                return true;
+            }
+            current = node.parent;
+        }
+        false
+    }
+
+    pub fn set_hidden(&self, key: AccessKey, hidden: bool) {
+        let parent = {
+            let mut node = self.get_node_mut(key).expect("node not found");
+            if node.hidden() == hidden {
+                return;
+            }
+            node.set_hidden(hidden);
+            node.parent
+        };
+        let platform = self.internal.borrow().platform.clone();
+        let _ = platform.children_changed(parent.unwrap_or(key), self);
     }
 
     /// Updates a node's name and notifies the native accessibility platform.
@@ -472,6 +534,9 @@ impl<T: AccessWindow, U: AccessNodeContext> AccessTree<T, U> {
     /// `None` if `root` does not belong to this tree or the point lies outside
     /// its bounds.
     pub fn element_from_point(&self, root: AccessKey, x: f64, y: f64) -> Option<AccessKey> {
+        if self.is_hidden(root) {
+            return None;
+        }
         self.internal.borrow().element_from_point(root, x, y)
     }
 
@@ -512,11 +577,8 @@ impl<T: AccessWindow, U: AccessNodeContext> AccessTree<T, U> {
     ///
     /// Registration errors are ignored.
     pub fn register_window(&self, window: T) {
-        let _ = self
-            .internal
-            .borrow()
-            .platform
-            .register_window(window.clone(), self);
+        let platform = self.internal.borrow().platform.clone();
+        let _ = platform.register_window(window, self);
     }
 
     /// Dispatches an access event.
@@ -530,7 +592,7 @@ impl<T: AccessWindow, U: AccessNodeContext> AccessTree<T, U> {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 impl<T: AccessWindow, U: AccessNodeContext> WeakAccessTree<T, U> {
     pub(crate) fn upgrade(&self) -> Option<AccessTree<T, U>> {
         Some(AccessTree {
@@ -749,6 +811,9 @@ impl<T: AccessWindow, U: AccessNodeContext> AccessTreeInternal<T, U> {
 
     fn accessible_name(&self, node: AccessKey) -> Option<String> {
         let node = self.nodes.get(node)?;
+        if node.hidden() {
+            return Some(String::new());
+        }
         if !node.name().is_empty() {
             return Some(String::from(node.name()));
         }
@@ -774,7 +839,7 @@ impl<T: AccessWindow, U: AccessNodeContext> AccessTreeInternal<T, U> {
 
     fn element_from_point(&self, node: AccessKey, x: f64, y: f64) -> Option<AccessKey> {
         let node_data = self.nodes.get(node)?;
-        if !node_data.bounding_rect().contains(x, y) {
+        if node_data.hidden() || !node_data.bounding_rect().contains(x, y) {
             return None;
         }
 
@@ -796,7 +861,7 @@ impl<T: AccessWindow, U: AccessNodeContext> AccessTreeInternal<T, U> {
     pub fn set_native_platform(&mut self) -> Result<(), ()> {
         let platform = cfg_select! {
             target_os = "windows" => Box::new(crate::platforms::WindowsPlatform::new()),
-            target_os = "macos" => Box::new(BlankPlatform::new()),
+            target_os = "macos" => Box::new(crate::platforms::MacOsPlatform::new()),
             target_family = "wasm" => Box::new(BlankPlatform::new()),
             target_os = "linux" => Box::new(BlankPlatform::new()),
             _ => Box::new(BlankPlatform::new()),
@@ -837,6 +902,7 @@ mod tests {
         checked_event_count: Rc<Cell<u32>>,
         name_event_count: Rc<Cell<u32>>,
         value_event_count: Rc<Cell<u32>>,
+        changed_children: Rc<RefCell<alloc::vec::Vec<AccessKey>>>,
     }
 
     impl AccessPlatform<TestWindow, ()> for FocusRecordingPlatform {
@@ -859,6 +925,16 @@ mod tests {
         ) -> Result<(), ()> {
             self.event_count.set(self.event_count.get() + 1);
             self.last_focused.set(Some(node));
+            Ok(())
+        }
+
+        fn children_changed(
+            &self,
+            node: AccessKey,
+            tree: &AccessTree<TestWindow, ()>,
+        ) -> Result<(), ()> {
+            assert!(tree.get_node_mut(node).is_some());
+            self.changed_children.borrow_mut().push(node);
             Ok(())
         }
 
@@ -895,7 +971,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     fn weak_tree_does_not_retain_the_tree() {
         let weak_tree = {
             let tree = AccessTree::<TestWindow, ()>::new();
@@ -903,6 +979,26 @@ mod tests {
         };
 
         assert!(weak_tree.upgrade().is_none());
+    }
+
+    #[test]
+    fn structural_changes_notify_both_parents_after_releasing_the_tree_borrow() {
+        let tree = AccessTree::<TestWindow, ()>::new();
+        let platform = FocusRecordingPlatform::default();
+        tree.set_platform(Box::new(platform.clone())).unwrap();
+        let first = tree.insert_node(AccessNode::new(), None);
+        let second = tree.insert_node(AccessNode::new(), None);
+        let child = tree.insert_node(AccessNode::new(), Some(first));
+        tree.append_child(second, child);
+        tree.set_children(first, &[child]);
+        tree.detach_node(child);
+        tree.append_child(second, child);
+        tree.remove_node(child);
+
+        assert_eq!(
+            *platform.changed_children.borrow(),
+            [first, first, second, second, first, first, second, second],
+        );
     }
 
     #[test]
