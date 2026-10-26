@@ -18,6 +18,7 @@ mod selection_data;
 mod text;
 
 pub mod platforms;
+pub mod ExpandCollapseState;
 
 pub use crate::access_event::AccessEvent;
 pub use crate::access_node::AccessNode;

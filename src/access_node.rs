@@ -12,6 +12,7 @@ use crate::live_setting::LiveSetting;
 use crate::roles::Role;
 use crate::text::{SupportedTextSelection, TextData};
 use crate::{AccessKey, ScrollData, SelectionData};
+use crate::ExpandCollapseState::ExpandCollapseState;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -43,6 +44,8 @@ pub struct AccessNode<T: AccessNodeContext> {
 
     selection_data: Option<SelectionData>,
     scroll_data: ScrollData,
+
+    expanded: ExpandCollapseState,
 }
 
 impl<T: AccessNodeContext> Clone for AccessNode<T> {
@@ -64,6 +67,7 @@ impl<T: AccessNodeContext> Clone for AccessNode<T> {
             context: self.context.clone(),
             selection_data: self.selection_data.clone(),
             scroll_data: self.scroll_data,
+            expanded: self.expanded,
         }
     }
 }
@@ -88,6 +92,7 @@ impl<T: AccessNodeContext> AccessNode<T> {
             context: None,
             selection_data: None,
             scroll_data: ScrollData::None,
+            expanded: ExpandCollapseState::LeafNode,
         }
     }
 
@@ -221,6 +226,16 @@ impl<T: AccessNodeContext> AccessNode<T> {
 
     pub fn set_scroll_data(&mut self, scroll_data: ScrollData) {
         self.scroll_data = scroll_data;
+    }
+
+    /// Gets whether the node is expanded, collapsed, etc.
+    pub fn expanded(&self) -> ExpandCollapseState {
+        self.expanded
+    }
+
+    /// Sets whether the node is expanded, collapsed, etc.
+    pub fn set_expanded(&mut self, expanded: ExpandCollapseState) {
+        self.expanded = expanded;
     }
 }
 

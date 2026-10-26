@@ -19,8 +19,9 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::Ole::{SafeArrayCreateVector, SafeArrayDestroy, SafeArrayPutElement};
 use windows::Win32::System::Variant::{VARIANT, VT_I4, VT_R8, VT_UNKNOWN};
 use windows::Win32::UI::Accessibility::{
-    Assertive as UiaAssertive, IInvokeProvider, IInvokeProvider_Impl, IRawElementProviderFragment,
-    IRawElementProviderFragment_Impl, IRawElementProviderFragmentRoot,
+    Assertive as UiaAssertive, ExpandCollapseState, IExpandCollapseProvider,
+    IExpandCollapseProvider_Impl, IInvokeProvider, IInvokeProvider_Impl,
+    IRawElementProviderFragment, IRawElementProviderFragment_Impl, IRawElementProviderFragmentRoot,
     IRawElementProviderFragmentRoot_Impl, IRawElementProviderSimple,
     IRawElementProviderSimple_Impl, IScrollItemProvider, IScrollItemProvider_Impl, IScrollProvider,
     IScrollProvider_Impl, ISelectionItemProvider, ISelectionItemProvider_Impl, ISelectionProvider,
@@ -35,16 +36,16 @@ use windows::Win32::UI::Accessibility::{
     TextPatternRangeEndpoint, TextUnit, TextUnit_Character, ToggleState, ToggleState_Off,
     ToggleState_On, UIA_AutomationFocusChangedEventId, UIA_ButtonControlTypeId,
     UIA_CheckBoxControlTypeId, UIA_ComboBoxControlTypeId, UIA_ControlTypePropertyId,
-    UIA_E_ELEMENTNOTAVAILABLE, UIA_EVENT_ID, UIA_EditControlTypeId, UIA_FrameworkIdPropertyId,
-    UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId, UIA_HyperlinkControlTypeId,
-    UIA_ImageControlTypeId, UIA_Invoke_InvokedEventId, UIA_InvokePatternId,
-    UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId, UIA_IsEnabledPropertyId,
-    UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId, UIA_ListItemControlTypeId,
-    UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId, UIA_MenuControlTypeId,
-    UIA_MenuItemControlTypeId, UIA_NamePropertyId, UIA_NativeWindowHandlePropertyId,
-    UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId, UIA_ProgressBarControlTypeId,
-    UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId, UIA_ScrollItemPatternId,
-    UIA_ScrollPatternId, UIA_ScrollPatternNoScroll,
+    UIA_E_ELEMENTNOTAVAILABLE, UIA_EVENT_ID, UIA_EditControlTypeId, UIA_ExpandCollapsePatternId,
+    UIA_FrameworkIdPropertyId, UIA_GroupControlTypeId, UIA_HasKeyboardFocusPropertyId,
+    UIA_HyperlinkControlTypeId, UIA_ImageControlTypeId, UIA_Invoke_InvokedEventId,
+    UIA_InvokePatternId, UIA_IsContentElementPropertyId, UIA_IsControlElementPropertyId,
+    UIA_IsEnabledPropertyId, UIA_IsKeyboardFocusablePropertyId, UIA_ListControlTypeId,
+    UIA_ListItemControlTypeId, UIA_LiveRegionChangedEventId, UIA_LiveSettingPropertyId,
+    UIA_MenuControlTypeId, UIA_MenuItemControlTypeId, UIA_NamePropertyId,
+    UIA_NativeWindowHandlePropertyId, UIA_PATTERN_ID, UIA_PROPERTY_ID, UIA_PaneControlTypeId,
+    UIA_ProgressBarControlTypeId, UIA_RadioButtonControlTypeId, UIA_ScrollBarControlTypeId,
+    UIA_ScrollItemPatternId, UIA_ScrollPatternId, UIA_ScrollPatternNoScroll,
     UIA_SelectionItem_ElementAddedToSelectionEventId,
     UIA_SelectionItem_ElementRemovedFromSelectionEventId, UIA_SelectionItem_ElementSelectedEventId,
     UIA_SelectionItemPatternId, UIA_SelectionPatternId, UIA_SeparatorControlTypeId,
@@ -56,15 +57,17 @@ use windows::Win32::UI::Accessibility::{
     UiaReturnRawElementProvider, UiaRootObjectId,
 };
 use windows::Win32::UI::Accessibility::{
-    SupportedTextSelection_Multiple, SupportedTextSelection_None, TextUnit_Document,
-    TextUnit_Format, TextUnit_Line, TextUnit_Page, TextUnit_Paragraph, TextUnit_Word,
-    UIA_E_NOTSUPPORTED, UIA_SelectionItemIsSelectedPropertyId,
+    ExpandCollapseState_Collapsed, ExpandCollapseState_Expanded, ExpandCollapseState_LeafNode,
+    ExpandCollapseState_PartiallyExpanded, SupportedTextSelection_Multiple,
+    SupportedTextSelection_None, TextUnit_Document, TextUnit_Format, TextUnit_Line, TextUnit_Page,
+    TextUnit_Paragraph, TextUnit_Word, UIA_E_NOTSUPPORTED, UIA_SelectionItemIsSelectedPropertyId,
 };
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{GetWindowRect, WM_GETOBJECT, WM_NCDESTROY};
 use windows::core::{BSTR, IUnknown, IUnknownImpl, Interface, implement};
 use windows_core::{BOOL, Ref};
 
+use crate::ExpandCollapseState::ExpandCollapseState as NodeExpandCollapseState;
 use crate::access_tree::WeakAccessTree;
 use crate::access_window::AccessNodeContext;
 use crate::platforms::AccessPlatform;
@@ -466,7 +469,8 @@ impl Default for WindowsPlatform {
     ISelectionItemProvider,
     IInvokeProvider,
     IScrollProvider,
-    IScrollItemProvider
+    IScrollItemProvider,
+    IExpandCollapseProvider
 )]
 struct WindowsProvider<T, U>
 where
@@ -685,6 +689,12 @@ where
             )
         {
             let provider: ISelectionItemProvider = self.to_interface();
+            return provider.cast();
+        }
+
+        if pattern_id == UIA_ExpandCollapsePatternId
+        {
+            let provider: IExpandCollapseProvider = self.to_interface();
             return provider.cast();
         }
 
@@ -1707,20 +1717,61 @@ where
     }
 }
 
+// Provides access to a control that visually expands to display content, and collapses to hide content.
+impl<T, U> IExpandCollapseProvider_Impl for WindowsProvider_Impl<T, U>
+where
+    T: AccessWindow,
+    U: AccessNodeContext,
+{
+    /// Displays all child nodes, controls, or content of the control.
+    #[allow(non_snake_case)]
+    fn Expand(&self) -> windows_core::Result<()> {
+        // This is a blocking method that returns after the control has been expanded.
+        let access_tree = self.access_tree()?;
+        access_tree
+            .dispatch_access_event(self.node, AccessEvent::Expand)
+            .map_err(|_| element_not_available())
+    }
+
+    /// Hides all child nodes, controls, or content of this element.
+    #[allow(non_snake_case)]
+    fn Collapse(&self) -> windows_core::Result<()> {
+        // This is a blocking method that returns after the element has been collapsed.
+        let access_tree = self.access_tree()?;
+        access_tree
+            .dispatch_access_event(self.node, AccessEvent::Collapse)
+            .map_err(|_| element_not_available())
+    }
+
+    /// Indicates the state, expanded or collapsed, of the control.
+    #[allow(non_snake_case)]
+    fn ExpandCollapseState(&self) -> windows_core::Result<ExpandCollapseState> {
+        let access_tree = self.access_tree()?;
+        let node = access_tree
+            .get_node(self.node)
+            .ok_or_else(element_not_available)?;
+        Ok(match node.expanded() {
+            NodeExpandCollapseState::Collapsed => ExpandCollapseState_Collapsed,
+            NodeExpandCollapseState::Expanded => ExpandCollapseState_Expanded,
+            NodeExpandCollapseState::PartiallyExpanded => ExpandCollapseState_PartiallyExpanded,
+            NodeExpandCollapseState::LeafNode => ExpandCollapseState_LeafNode,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     extern crate std;
 
     use core::cell::Cell;
 
+    use super::*;
     use raw_window_handle::{HandleError, HasWindowHandle, WindowHandle};
     use windows::Win32::System::Com::COINIT_MULTITHREADED;
     use windows::Win32::System::Ole::{
         SafeArrayGetDim, SafeArrayGetElement, SafeArrayGetLBound, SafeArrayGetUBound,
         SafeArrayGetVartype,
     };
-
-    use super::*;
 
     #[derive(Clone)]
     struct TestWindow;

@@ -20,4 +20,8 @@ pub enum AccessEvent {
     Scroll(ScrollEvent),
     /// Scroll the node into the viewport.
     ScrollIntoView,
+    /// Hides all child nodes, controls, or content of this element.
+    Collapse,
+    /// Displays all child nodes, controls, or content of the control.
+    Expand,
 }
